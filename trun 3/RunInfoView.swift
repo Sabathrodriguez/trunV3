@@ -64,14 +64,15 @@ struct RunInfoView: View {
     @State var alertDetails: String = ""
 
     var prevRunMinPerMile: String = ""
-            
+                
     var body: some View {
         
         let twoDecimalPlaceRun = String(format: "%.2f", locationManager.convertToMiles())
         let twoDecimalPlaceRunArray = twoDecimalPlaceRun.split(separator: ".")
         let minute = Int(currentTimer/60)
         let seconds = String(format: "%.1f", currentTimer.truncatingRemainder(dividingBy: 60.0))
-        let minPerMile = String(format: "%.2f", locationManager.convertToMiles() > 0 ? Double(minute)/locationManager.convertToMiles() : 0)
+//        let minPerMile = String(format: "%.2f", locationManager.convertToMiles() > 0 ? Double(minute)/locationManager.convertToMiles() : 0)
+        let minPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: currentTimer / 60)
         
         HStack {
             if (isRunDone) {
@@ -282,7 +283,7 @@ struct RunInfoView: View {
                             VStack(alignment: .leading) {
                                 Text("Distance: \(twoDecimalPlaceRunArray[0]).\(twoDecimalPlaceRunArray[1]) mi")
                                 Text("Time: \(minute):\(seconds)")
-                                Text("min/mile: \(minPerMile)")
+                                Text(minPerMile)
                             }
                             .font(.title2)
                             .foregroundColor(colorScheme == .dark ? .white : .black)
@@ -455,6 +456,25 @@ struct RunInfoView: View {
 //                                    if (locationManager.distance > minRunDistance) {
         isRunDone = false
     }
+    
+    private func calculateMilesPerMinute(distance: Double, time: Double) -> String {
+        // Check for valid inputs
+        if time <= 0 {
+            return "Error: Time must be greater than 0"
+        }
+        if distance < 0 {
+            return "Error: Distance cannot be negative"
+        }
+        if distance > 0 {
+            let minutesPerMile = time / distance
+            let wholeMinutes = Int(minutesPerMile)  // e.g., 6
+            let seconds = Int((minutesPerMile - Double(wholeMinutes)) * 60)  // e.g., 24
+            
+            return String(format: "%d:%02d minutes per mile", wholeMinutes, seconds)
+        } else {
+            return "Not enough data yet."
+        }
+}
     
     private func uploadUserRun() async {
 //        let ref = Database.database().reference()

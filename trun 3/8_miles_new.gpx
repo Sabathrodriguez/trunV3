@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="Grok 3 by xAI" version="1.1"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/11.xsd"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <metadata>
+    <name>Detroit Scenic 8-Mile Run</name>
+    <time>2025-02-20T12:00:00.000Z</time>
+  </metadata>
+  <trk>
+    <name>Detroit Scenic 8-Mile Run</name>
+    <trkseg>
+      <!-- Start at Detroit Riverfront -->
+      <trkpt lat="42.348883" lon="-83.036513">
+        <ele>190.38</ele>
+        <time>2025-02-20T12:00:00.000Z</time>
+      </trkpt>
+      <!-- Head east along Riverwalk -->
+      <trkpt lat="42.349441" lon="-83.034990">
+        <ele>190.17</ele>
+        <time>2025-02-20T12:00:05.000Z</time>
+      </trkpt>
+      <trkpt lat="42.349677" lon="-83.034668">
+        <ele>189.97</ele>
+        <time>2025-02-20T12:00:10.000Z</time>
+      </trkpt>
+      <trkpt lat="42.350342" lon="-83.035097">
+        <ele>190.00</ele>
+        <time>2025-02-20T12:00:20.000Z</time>
+      </trkpt>
+      <trkpt lat="42.350965" lon="-83.035505">
+        <ele>189.99</ele>
+        <time>2025-02-20T12:00:30.000Z</time>
+      </trkpt>
+      <!-- Turn south briefly -->
+      <trkpt lat="42.349935" lon="-83.040698">
+        <ele>190.04</ele>
+        <time>2025-02-20T12:01:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.349655" lon="-83.041449">
+        <ele>190.07</ele>
+        <time>2025-02-20T12:01:10.000Z</time>
+      </trkpt>
+      <trkpt lat="42.349248" lon="-83.042564">
+        <ele>190.06</ele>
+        <time>2025-02-20T12:01:30.000Z</time>
+      </trkpt>
+      <!-- Connect to Dequindre Cut Greenway -->
+      <trkpt lat="42.348733" lon="-83.043852">
+        <ele>189.80</ele>
+        <time>2025-02-20T12:02:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.347810" lon="-83.046427">
+        <ele>187.97</ele>
+        <time>2025-02-20T12:03:00.000Z</time>
+      </trkpt>
+      <!-- North along Dequindre Cut -->
+      <trkpt lat="42.350000" lon="-83.047000">
+        <ele>188.00</ele>
+        <time>2025-02-20T12:04:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.352000" lon="-83.048000">
+        <ele>188.50</ele>
+        <time>2025-02-20T12:06:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.354000" lon="-83.049000">
+        <ele>189.00</ele>
+        <time>2025-02-20T12:08:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.356000" lon="-83.050000">
+        <ele>189.50</ele>
+        <time>2025-02-20T12:10:00.000Z</time>
+      </trkpt>
+      <!-- Loop back via Lafayette and Rivard -->
+      <trkpt lat="42.357500" lon="-83.048500">
+        <ele>190.00</ele>
+        <time>2025-02-20T12:12:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.356000" lon="-83.045000">
+        <ele>190.50</ele>
+        <time>2025-02-20T12:14:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.354000" lon="-83.042000">
+        <ele>191.00</ele>
+        <time>2025-02-20T12:16:00.000Z</time>
+      </trkpt>
+      <!-- Return to Riverfront -->
+      <trkpt lat="42.352000" lon="-83.039000">
+        <ele>190.24</ele>
+        <time>2025-02-20T12:18:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.350965" lon="-83.038380">
+        <ele>189.78</ele>
+        <time>2025-02-20T12:20:00.000Z</time>
+      </trkpt>
+      <trkpt lat="42.349978" lon="-83.034775">
+        <ele>189.96</ele>
+        <time>2025-02-20T12:22:00.000Z</time>
+      </trkpt>
+      <!-- Finish at starting point -->
+      <trkpt lat="42.348883" lon="-83.036513">
+        <ele>190.38</ele>
+        <time>2025-02-20T12:24:00.000Z</time>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

@@ -11,7 +11,7 @@ import SwiftUI
 final class UserLocation: NSObject, ObservableObject, CLLocationManagerDelegate {
     var locationManager: CLLocationManager?
     
-    @Published var region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 37.78, longitude: -122.41), span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1))
+    @Published var region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 42.3314, longitude: -83.0458), span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1))
     
     @Published var regionView = MapCameraPosition.userLocation(fallback: .automatic)
     
