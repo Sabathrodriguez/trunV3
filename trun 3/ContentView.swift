@@ -13,8 +13,11 @@ struct ContentView: View {
     var routeConverter:GPXToRoute = GPXToRoute()
     
     @ObservedObject public var loginManager: LoginManager
-    
-    @State var runners = [Runner(id: 0, name: "a", iconID: "", location: CLLocationCoordinate2D(latitude: 42.3314, longitude: -83.0458))]
+    @State var runners = [
+        Runner(id: 0, name: "alan", iconID: "", location: CLLocationCoordinate2D(latitude: 42.34948396682739, longitude: -83.0350112915039), color: .green, routeID: 0),
+        Runner(id: 1, name: "sabath", iconID: "", location: CLLocationCoordinate2D(latitude: 42.349634254351, longitude: -83.034625053405), color: .blue, routeID: 1),
+        Runner(id: 2, name: "sebas", iconID: "", location: CLLocationCoordinate2D(latitude: 42.3485613707453, longitude: -83.0340027809143), color: .red, routeID: 2),
+        Runner(id: 3, name: "Anon", iconID: "", location: CLLocationCoordinate2D(latitude: 42.34982737340033, longitude: -83.03016185760498), color: .orange, routeID: 0)]
     
     @State var routes: [String: [Route]] = ["Run Detroit": [
         Route(id: 0, name: "3 mile red", GPXFileURL: "3_miles_red", color: .red),
@@ -47,76 +50,26 @@ struct ContentView: View {
     var body: some View {
         
         ZStack {
-            // background map
-//            Map(coordinateRegion: $viewModel.region, showsUserLocation: true)
             Map(position: $viewModel.regionView) {
                 
                 UserAnnotation()
                 
                 MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: selectedRoute.GPXFileURL)!)
                                             .stroke(selectedRoute.color, lineWidth: 2)
-//                switch selectedRoute {
-//                case Routes.three_red:
-////                    MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: routes["Run Detroit"]![0].GPXFileURL) ?? [])
-//                    MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "3_miles_red")!)
-//                            .stroke(.red, lineWidth: 2)
-//                case Routes.six_red:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "6_miles_red")!)
-//                            .stroke(.red, lineWidth: 2)
-//                case Routes.ten_red:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "10_miles_red")!)
-//                            .stroke(.red, lineWidth: 2)
-//                case Routes.three_gold:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "3_miles_gold")!)
-//                            .stroke(.yellow, lineWidth: 2)
-//                case Routes.six_gold:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "6_miles_gold")!)
-//                            .stroke(.yellow, lineWidth: 2)
-//                case Routes.ten_gold:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "10_miles_gold")!)
-//                            .stroke(.yellow, lineWidth: 2)
-//                case Routes.three_green:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "3_miles_green")!)
-//                            .stroke(.green, lineWidth: 2)
-//                case Routes.six_green:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "6_miles_green")!)
-//                            .stroke(.green, lineWidth: 2)
-//                case Routes.ten_green:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "10_miles_green")!)
-//                            .stroke(.green, lineWidth: 2)
-//                case Routes.six_red:
-//                        MapPolyline(coordinates: routeConverter.convertGPXToRoute(filePath: "8_miles_new")!)
-//                        .stroke(.green, lineWidth: 2)
-//                default:
-//                    MapPolyline(coordinates: [])
-//                }
-                
-            Annotation("User 2", coordinate: routeConverter.convertGPXToRoute(filePath: selectedRoute.GPXFileURL)![0]) {
-                    Circle()
-                        .foregroundColor(.blue)
+                ForEach(runners) { runner in
+                    if runner.routeID == selectedRoute.id {
+                        Annotation(runner.name, coordinate: runner.location) {
+                            Circle()
+                                .foregroundColor(runner.color)
+                        }
+                    }
                 }
-//                
-                Annotation("User 3", coordinate: routeConverter.convertGPXToRoute(filePath: "10_miles_green")![4]) {
-                    Circle()
-                        .foregroundColor(.yellow)
-                }
-                
-                Annotation("User 4", coordinate: routeConverter.convertGPXToRoute(filePath: "10_miles_green")![8]) {
-                    Circle()
-                        .foregroundColor(.red)
-                }
-                
-                Annotation("User 5", coordinate: routeConverter.convertGPXToRoute(filePath: "10_miles_green")![12]) {
-                    Circle()
-                        .foregroundColor(.green)
-                }
-                
-                
             }
             .mapControls {
                 MapCompass()
             }
             .id(selectedRoute)
+            .id(runners)
             .edgesIgnoringSafeArea(.all)
             .onAppear {
                 viewModel.checkIfLocationServicesEnabled()
@@ -137,11 +90,6 @@ struct ContentView: View {
                     }
                     List {
                         Picker("Run Options", selection: $selectedRoute) {
-//                            ForEach(Routes.allCases) { route in
-//                                Text(route.rawValue)
-//                                    .tag(route)
-//                            }
-                            var r: [Route] = routes["Run Detroit"]!
                             ForEach(routes["Run Detroit"]!) { route in
                                 Text(route.name).tag(route)
                             }
@@ -151,8 +99,6 @@ struct ContentView: View {
             }
             VStack(alignment: .center) {
                 Spacer(minLength: 550)
-//                    .offset(y: geometry.size.height / 2 + 40)
-//                    .border(Color.red, width: 1)
                 .frame(height: 100)
                 
                 Spacer()
@@ -163,8 +109,6 @@ struct ContentView: View {
             .cornerRadius(20)
             .shadow(radius: 80)
             .frame(height: 600)
-//                .border(Color.red, width: 1)
-//                .offset(y: geometry.size.height / 2 + 50)
             )
         }
     }

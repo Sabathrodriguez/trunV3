@@ -18,14 +18,14 @@ struct trunApp: App {
     init() {
         FirebaseApp.configure()
         
-//        let settings = Firestore.firestore().settings
-//        settings.host = "localhost:8080" // Default port for Firestore emulator
-//        settings.isPersistenceEnabled = false
-//        settings.isSSLEnabled = false
-//        Firestore.firestore().settings = settings
+        let settings = Firestore.firestore().settings
+        settings.host = "localhost:8080" // Default port for Firestore emulator
+        settings.isPersistenceEnabled = false
+        settings.isSSLEnabled = false
+        Firestore.firestore().settings = settings
         
-//        Auth.auth().useEmulator(withHost: "localhost", port: 9099)
-//        Database.database().useEmulator(withHost: "localhost", port: 9000)
+        Auth.auth().useEmulator(withHost: "localhost", port: 9099)
+        Database.database().useEmulator(withHost: "localhost", port: 9000)
     }
 
     var body: some Scene {

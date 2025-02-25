@@ -63,7 +63,7 @@ struct RunInfoView: View {
     @State var alertTitle: String = ""
     @State var alertDetails: String = ""
 
-    var prevRunMinPerMile: String = ""
+    @State var prevRunMinPerMile: String = ""
                 
     var body: some View {
         
@@ -72,7 +72,7 @@ struct RunInfoView: View {
         let minute = Int(currentTimer/60)
         let seconds = String(format: "%.1f", currentTimer.truncatingRemainder(dividingBy: 60.0))
 //        let minPerMile = String(format: "%.2f", locationManager.convertToMiles() > 0 ? Double(minute)/locationManager.convertToMiles() : 0)
-        let minPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: currentTimer / 60)
+        var minPerMile = prevRunMinPerMile
         
         HStack {
             if (isRunDone) {
@@ -155,11 +155,7 @@ struct RunInfoView: View {
                             Rectangle()
                                 .frame(width: 120, height: 70)
                                 .foregroundColor(Color.green)
-                                .cornerRadius(10)
-                                .overlay(content: {
-                                    Rectangle()
-                                        .stroke(.black, lineWidth: 2)
-                                })
+                                .cornerRadius(10)                               
                                 .overlay {
                                     Text("GO")
                                         .foregroundColor(Color.black)
@@ -423,6 +419,9 @@ struct RunInfoView: View {
         .onReceive(timer) { _ in
             if (!isTimerPaused) {
                 currentTimer += 0.1
+                if Int(currentTimer) % 3 == 0 {
+                    prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: currentTimer / 60)
+                }
             }
         }
         .alert(isPresented: $showAlert) {
@@ -469,11 +468,10 @@ struct RunInfoView: View {
             let minutesPerMile = time / distance
             let wholeMinutes = Int(minutesPerMile)  // e.g., 6
             let seconds = Int((minutesPerMile - Double(wholeMinutes)) * 60)  // e.g., 24
-            
+            prevRunMinPerMile = String(format: "%d:%02d minutes per mile", wholeMinutes, seconds)
             return String(format: "%d:%02d minutes per mile", wholeMinutes, seconds)
-        } else {
-            return "Not enough data yet."
         }
+        return prevRunMinPerMile
 }
     
     private func uploadUserRun() async {
