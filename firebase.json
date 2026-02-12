@@ -14,9 +14,6 @@
     "database": {
       "port": 9000
     },
-    "ui": {
-      "enabled": false
-    },
     "firestore": {
       "port": 8080
     }

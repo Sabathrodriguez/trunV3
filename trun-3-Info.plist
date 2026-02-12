@@ -13,5 +13,11 @@
 			</array>
 		</dict>
 	</array>
+	<key>NShealth</key>
+	<string></string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 </dict>
 </plist>

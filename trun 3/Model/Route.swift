@@ -6,7 +6,7 @@
 //
 import SwiftUI
 
-class Route: Identifiable, Hashable {
+class Route: Identifiable, Hashable, Codable {
     static func == (lhs: Route, rhs: Route) -> Bool {
         return lhs.id == rhs.id && lhs.name == rhs.name
     }
@@ -21,12 +21,19 @@ class Route: Identifiable, Hashable {
     var runners: [Runner]?
     var name: String
     var GPXFileURL: String
-    var color: Color
+    var color: [Double]
     
-    init(id: Double, name: String, GPXFileURL: String, color: Color) {
+    init(id: Double, name: String, GPXFileURL: String, color: [Double]) {
         self.id = id
         self.name = name
         self.GPXFileURL = GPXFileURL
         self.color = color
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case GPXFileURL
+        case color
     }
 }

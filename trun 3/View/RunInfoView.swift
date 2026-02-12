@@ -1,3 +1,4 @@
+
 //
 //  RunInfoView.swift
 //  trun
@@ -13,19 +14,28 @@ import UIKit
 import Photos
 import FirebaseAuth
 import FirebaseFirestore
+import UniformTypeIdentifiers
 
 struct RunInfoView: View {
     let db = Firestore.firestore()
     
-    @State var runData: RunData
+    @State var runData: Run
     @State var currentDate: Date
     
     @ObservedObject var loginManager: LoginManager
+    @ObservedObject var healthStore: HealthStore
     @Binding var selectedRun: Pace?
     @Binding var runTypeDict: [Pace: Double]
     @Binding var runningMenuHeight: PresentationDetent
     @Binding var searchWasClicked: Bool
     @Binding var inRunningMode: Bool
+    @ObservedObject var region: UserLocation
+    
+//    @Binding var cameraPosition: MapCameraPosition
+//    
+    // Bindings passed down to modify routes
+    @Binding var routes: [String: [Route]]
+    @Binding var selectedRoute: Route
     
     @State var isPaused: Bool = false
     @State private var isLongPressing = false
@@ -36,8 +46,7 @@ struct RunInfoView: View {
     @FocusState var isSearchFieldFocused: Bool
     
     @Environment(\.colorScheme) var colorScheme
-    
-    @ObservedObject var region: UserLocation
+
     
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 1-second interval
     @State private var currentTimer = 0.0
@@ -59,9 +68,9 @@ struct RunInfoView: View {
     @State var prevRunMinute: Int = 0
     @State var prevRunSecond: String = ""
     
-    @State var showAlert: Bool = false
-    @State var alertTitle: String = ""
-    @State var alertDetails: String = ""
+    @Binding var showAlert: Bool
+    @Binding var alertTitle: String
+    @Binding var alertDetails: String
 
     @State var prevRunMinPerMile: String = ""
                 
@@ -77,10 +86,13 @@ struct RunInfoView: View {
         HStack {
             if (isRunDone) {
                 VStack(alignment: .leading) {
+                    Text("Run Summary:")
                     let formattedPrevDistance = String(format: "Distance: %.2f", prevRunDistance)
-                    Text(formattedPrevDistance)
+                    Text(formattedPrevDistance).font(Font.title3)
                     let formattedPrevTime = "Time: \(prevRunMinute) min. \(prevRunSecond) sec."
-                    Text(formattedPrevTime)
+                    Text(formattedPrevTime).font(Font.title3)
+                    let formattedMinPerMile = "Current Min/Mile: " + String(minPerMile)
+                    Text(formattedMinPerMile).font(Font.title3)
                     
                     HStack {
                         Button(action: {
@@ -95,6 +107,19 @@ struct RunInfoView: View {
                             Task {
                                 await uploadUserRun()
                             }
+                            
+                            // Example usage inside your Save Button action
+                            healthStore.saveRun(
+                                startTime: runData.startTime, // You'll need to pass the actual start time
+                                endTime: Date(),
+                                distanceInMiles: locationManager.convertToMiles(),
+                                calories: 0 // You'll need to calculate this or pass 0
+                            ) { success, error in
+                                if success {
+                                    print("Run saved to HealthKit!")
+                                }
+                            }
+                            
                         })
                         {
                             Circle()
@@ -151,11 +176,12 @@ struct RunInfoView: View {
                             isTimerPaused = false
                             isPaused = false
                             currentTimer = 0
+                            runData.startTime = Date()
                         }) {
                             Rectangle()
                                 .frame(width: 120, height: 70)
                                 .foregroundColor(Color.green)
-                                .cornerRadius(10)                               
+                                .cornerRadius(10)
                                 .overlay {
                                     Text("GO")
                                         .foregroundColor(Color.black)
@@ -178,25 +204,25 @@ struct RunInfoView: View {
                 }
             } else if (searchWasClicked && runningMenuHeight == .large) {
                 HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
-                        .padding(Edge.Set([.leading]))
-                    
-                    TextField("Search", text: $searchField)
-                        .multilineTextAlignment(.leading)
-                        .focused($isSearchFieldFocused)
-                }
-                .frame(height: 40)
-                .background(colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray6))
-                .cornerRadius(20)
-                .padding(Edge.Set([.top, .leading, .bottom]))
+                   Image(systemName: "magnifyingglass")
+                       .foregroundColor(.gray)
+                       .padding(Edge.Set([.leading]))
+                   
+                   TextField("Search", text: $searchField)
+                       .multilineTextAlignment(.leading)
+                       .focused($isSearchFieldFocused)
+               }
+               .frame(height: 40)
+               .background(colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray6))
+               .cornerRadius(20)
+               .padding(Edge.Set([.top, .leading, .bottom]))
                 
-                Button("Cancel", action: {
-                    searchWasClicked = false
-                    runningMenuHeight = .height(250)
-                })
-                .padding(Edge.Set([.trailing]))
-            } else {
+               Button("Cancel", action: {
+                   searchWasClicked = false
+                   runningMenuHeight = .height(250)
+               })
+               .padding(Edge.Set([.trailing]))
+           } else {
                 if (!inRunningMode) {
                     VStack {
                         HStack {
@@ -216,7 +242,7 @@ struct RunInfoView: View {
                                             .stroke(.black, lineWidth: 1)
                                     })
                                     .padding()
-                            }
+                            }                                                        
                             
                             Spacer()
                             
@@ -229,6 +255,7 @@ struct RunInfoView: View {
                                     isPaused = false
                                     currentTimer = 0
                                     isRunDone = false
+                                    runData.startTime = Date()
                                 }) {
                                     Circle()
                                         .frame(width: 120, height: 120)
@@ -251,7 +278,12 @@ struct RunInfoView: View {
                             
                             // this will locate the user based on the phone gps
                             Button(action: {
-                                region.checkLocationAuthorization()
+//                                region.checkLocationAuthorization()
+                                
+                                withAnimation {
+                                    region.centerOnUser()
+                                }
+                                
                             }) {
                                 Image(systemName: "location.circle.fill")
                                     .resizable()
@@ -265,11 +297,11 @@ struct RunInfoView: View {
                                 //                                            .border(Color.blue, width: 1)
                             }
                         }
-                        Button(action: {
-                            loginManager.isLoggedIn = false
-                        }) {
-                            Text("Sign Out")
-                        }
+//                        Button(action: {
+//                            loginManager.isLoggedIn = false
+//                        }) {
+//                            Text("Sign Out")
+//                        }
                     }
                 } else {
                     VStack {
@@ -311,11 +343,15 @@ struct RunInfoView: View {
                         .sheet(isPresented: $isImagePickerPresented) {
                             ImagePicker(sourceType: .camera) { image in
                                 // Handle the captured image here (optional)
-                                if let image = image {
-                                    saveImageToPhotoLibrary(image: image)
+                                do {
+                                    if let image = image {
+                                        saveImageToPhotoLibrary(image: image)
+                                    }
+                                } catch {
+                                    print("not working")
                                 }
                             }
-                        }                        
+                        }
 
                         Spacer()
 
@@ -399,7 +435,11 @@ struct RunInfoView: View {
                         // this will locate the user based on the phone gps
                         Button(action: {
                             print("location clicked")
-                            region.checkLocationAuthorization()
+//                            region.checkLocationAuthorization()
+                            
+                            withAnimation {
+                                region.centerOnUser()
+                            }
                         }) {
                             Image(systemName: "location.circle.fill")
                                 .resizable()
@@ -415,7 +455,7 @@ struct RunInfoView: View {
                     }
                 }
             }
-        }
+       }
         .onReceive(timer) { _ in
             if (!isTimerPaused) {
                 currentTimer += 0.1
@@ -472,7 +512,7 @@ struct RunInfoView: View {
             return String(format: "%d:%02d minutes per mile", wholeMinutes, seconds)
         }
         return prevRunMinPerMile
-}
+    }
     
     private func uploadUserRun() async {
 //        let ref = Database.database().reference()
@@ -499,4 +539,6 @@ struct RunInfoView: View {
             print("Error encoding data: \(error)")
         }
     }
+    
+    
 }
