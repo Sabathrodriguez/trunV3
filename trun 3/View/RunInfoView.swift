@@ -1,9 +1,8 @@
-
 //
 //  RunInfoView.swift
 //  trun
 //
-//  Created by Sabath  Rodriguez on 12/7/24.
+//  Created by Sabath Rodriguez on 12/7/24.
 //
 
 import SwiftUI
@@ -31,14 +30,10 @@ struct RunInfoView: View {
     @Binding var inRunningMode: Bool
     @ObservedObject var region: UserLocation
     
-//    @Binding var cameraPosition: MapCameraPosition
-//    
-    // Bindings passed down to modify routes
     @Binding var routes: [String: [Route]]
     @Binding var selectedRoute: Route
     
     @State var isPaused: Bool = false
-    @State private var isLongPressing = false
     @State var searchField: String = ""
     
     @StateObject var locationManager = LocationManager()
@@ -47,23 +42,17 @@ struct RunInfoView: View {
     
     @Environment(\.colorScheme) var colorScheme
 
-    
-    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 1-second interval
+    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     @State private var currentTimer = 0.0
     @State private var isTimerPaused: Bool = false
     
-    var iconHeightAndWidth: CGFloat = 75
-    
     let generator = UISelectionFeedbackGenerator()
-    
     private let cancelTimer = 1.5
     
     @State private var isCameraAvailable = false
     @State private var isImagePickerPresented = false
     
     @State var isRunDone: Bool = false
-    var minRunDistance: Double = 3
-    
     @State var prevRunDistance: Double = 0
     @State var prevRunMinute: Int = 0
     @State var prevRunSecond: String = ""
@@ -72,394 +61,223 @@ struct RunInfoView: View {
     @Binding var alertTitle: String
     @Binding var alertDetails: String
 
-    @State var prevRunMinPerMile: String = ""
+    @State var prevRunMinPerMile: String = "0:00"
                 
     var body: some View {
-        
         let twoDecimalPlaceRun = String(format: "%.2f", locationManager.convertToMiles())
-        let twoDecimalPlaceRunArray = twoDecimalPlaceRun.split(separator: ".")
         let minute = Int(currentTimer/60)
-        let seconds = String(format: "%.1f", currentTimer.truncatingRemainder(dividingBy: 60.0))
-//        let minPerMile = String(format: "%.2f", locationManager.convertToMiles() > 0 ? Double(minute)/locationManager.convertToMiles() : 0)
-        var minPerMile = prevRunMinPerMile
+        let seconds = String(format: "%02d", Int(currentTimer) % 60)
         
-        HStack {
-            if (isRunDone) {
-                VStack(alignment: .leading) {
-                    Text("Run Summary:")
-                    let formattedPrevDistance = String(format: "Distance: %.2f", prevRunDistance)
-                    Text(formattedPrevDistance).font(Font.title3)
-                    let formattedPrevTime = "Time: \(prevRunMinute) min. \(prevRunSecond) sec."
-                    Text(formattedPrevTime).font(Font.title3)
-                    let formattedMinPerMile = "Current Min/Mile: " + String(minPerMile)
-                    Text(formattedMinPerMile).font(Font.title3)
+        VStack(spacing: 20) {
+            
+            // --- STATE 1: RUN FINISHED SUMMARY ---
+            if isRunDone {
+                VStack(spacing: 25) {
+                    Text("Great Run!")
+                        .font(.system(.largeTitle, design: .rounded).weight(.heavy))
+                        .foregroundColor(.primary)
                     
-                    HStack {
+                    VStack(spacing: 15) {
+                        SummaryRow(icon: "map.fill", title: "Distance", value: String(format: "%.2f mi", prevRunDistance))
+                        SummaryRow(icon: "stopwatch.fill", title: "Time", value: "\(prevRunMinute):\(prevRunSecond)")
+                        SummaryRow(icon: "speedometer", title: "Pace", value: "\(prevRunMinPerMile)/mi")
+                    }
+                    .padding()
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(16)
+                    
+                    HStack(spacing: 20) {
                         Button(action: {
-                            currentDate = Date()
-                            let dateFormatter = DateFormatter()
-                            dateFormatter.dateStyle = .medium
-                            dateFormatter.timeStyle = .short
-                            runData.averagePace = prevRunMinPerMile
-                            runData.distance = prevRunDistance
-                            runData.time = Double(prevRunMinute) + Double(prevRunSecond)!/60
-                            runData.dateString = dateFormatter.string(from: currentDate)
-                            Task {
-                                await uploadUserRun()
-                            }
-                            
-                            // Example usage inside your Save Button action
-                            healthStore.saveRun(
-                                startTime: runData.startTime, // You'll need to pass the actual start time
-                                endTime: Date(),
-                                distanceInMiles: locationManager.convertToMiles(),
-                                calories: 0 // You'll need to calculate this or pass 0
-                            ) { success, error in
-                                if success {
-                                    print("Run saved to HealthKit!")
-                                }
-                            }
-                            
-                        })
-                        {
-                            Circle()
-                                .frame(width: 120, height: 100)
-                                .foregroundColor(Color.green)
-                                .overlay(content: {
-                                    Circle()
-                                        .stroke(Color(.black), lineWidth: 2)
-                                })
-                                .overlay {
-                                    Text("Save")
-                                        .foregroundColor(Color.black)
-                                        .fontWeight(.bold)
-                                        .font(.title2)
-                                        .foregroundColor(Color.black)
-                                }
+                             clearRunInformation()
+                        }) {
+                            Text("Discard")
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.red.opacity(0.15))
+                                .foregroundColor(.red)
+                                .cornerRadius(12)
                         }
                         
                         Button(action: {
-                          clearRunInformation()
-                        })
-                        {
-                            Circle()
-                                .frame(width: 120, height: 100)
-                                .foregroundColor(Color.red)
-                                .overlay(content: {
-                                    Circle()
-                                        .stroke(Color(.black), lineWidth: 2)
-                                    
-                                })
-                                .overlay {
-                                    Text("Delete")
-                                        .foregroundColor(Color.black)
-                                        .fontWeight(.bold)
-                                        .font(.title2)
-                                }
+                            saveRunAction()
+                        }) {
+                            Text("Save Run")
+                                .fontWeight(.bold)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                                .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 5)
                         }
                     }
                 }
-                .padding()
-                .font(.title2)
-                .foregroundColor(colorScheme == .dark ? .white : .black)
-                .bold()
-                               
+                .padding(.horizontal)
                 
-            } else if (runningMenuHeight == .height(100)) {
-                if (!inRunningMode) {
-                    VStack {
-                        Spacer()
+            // --- STATE 2: IDLE (Pre-Run) ---
+            } else if !inRunningMode {
+                HStack {
+                    // Search Button
+                    Button(action: {
+                        runningMenuHeight = .large
+                        searchWasClicked = true
+                        isSearchFieldFocused = true
+                    }) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title2)
+                            .padding()
+                            .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                    }
+                    
+                    Spacer()
+                    
+                    // START BUTTON
+                    Button(action: {
+                        startRun()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 80, height: 80)
+                                .shadow(color: .green.opacity(0.4), radius: 10, x: 0, y: 5)
+                            
+                            Text("GO")
+                                .font(.system(.title, design: .rounded).bold())
+                                .foregroundColor(.white)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Location Button
+                    Button(action: {
+                        withAnimation { region.centerOnUser() }
+                    }) {
+                        Image(systemName: "location.fill")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                            .padding()
+                            .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                    }
+                }
+                .padding(.horizontal)
+                
+            // --- STATE 3: RUNNING (Active) ---
+            } else {
+                // LIVE METRICS
+                HStack(alignment: .bottom, spacing: 30) {
+                    VStack(alignment: .leading) {
+                        Text("DISTANCE")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.secondary)
+                        Text(twoDecimalPlaceRun)
+                            .font(.system(size: 54, weight: .heavy, design: .rounded))
+                        Text("MILES")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 15) {
+                        VStack(alignment: .leading) {
+                            Text("TIME")
+                                .font(.caption2).bold().foregroundColor(.secondary)
+                            Text("\(minute):\(seconds)")
+                                .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        }
+                        
+                        VStack(alignment: .leading) {
+                            Text("PACE")
+                                .font(.caption2).bold().foregroundColor(.secondary)
+                            Text(prevRunMinPerMile)
+                                .font(.system(size: 20, weight: .medium, design: .rounded))
+                        }
+                    }
+                }
+                .padding(.top)
+
+                Spacer()
+                
+                // CONTROLS (Pause/Stop/Camera)
+                HStack(spacing: 40) {
+                    // Camera
+                    Button(action: { isImagePickerPresented = true }) {
+                        Image(systemName: "camera.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 50, height: 50)
+                            .background(Circle().fill(Color.gray.opacity(0.5)))
+                    }
+                    .disabled(!isCameraAvailable)
+                    
+                    // Pause / Resume / Stop Logic
+                    if isPaused {
+                        // LONG PRESS TO STOP
+                        Button(action: {}) {
+                            ZStack {
+                                Circle()
+                                    .stroke(Color.red, lineWidth: 4)
+                                    .frame(width: 80, height: 80)
+                                
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 60, height: 60)
+                                
+                                Text("HOLD\nSTOP")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .multilineTextAlignment(.center)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .simultaneousGesture(LongPressGesture(minimumDuration: cancelTimer).onEnded { _ in
+                            finishRun(minute: minute, seconds: seconds)
+                        })
+                        
+                        // RESUME BUTTON
                         Button(action: {
-                            inRunningMode = true
-                            locationManager.distance = 0
+                            isPaused = false
                             locationManager.startTracking()
                             isTimerPaused = false
-                            isPaused = false
-                            currentTimer = 0
-                            runData.startTime = Date()
                         }) {
-                            Rectangle()
-                                .frame(width: 120, height: 70)
-                                .foregroundColor(Color.green)
-                                .cornerRadius(10)
-                                .overlay {
-                                    Text("GO")
-                                        .foregroundColor(Color.black)
-                                        .fontWeight(.bold)
-                                        .font(.title)
-                                }
+                            Image(systemName: "play.fill")
+                                .font(.title)
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(Circle().fill(Color.green))
                         }
-                    }
-                } else {
-                    if (selectedRun != nil) {
-                        Text("Distance: \(twoDecimalPlaceRunArray[0]).\(twoDecimalPlaceRunArray[1]) mi")
-                            .font(.title2)
-                            .foregroundColor(colorScheme == .dark ? .white : .black)
-                            .bold()
-                            .padding(.top, 30)
+                        
                     } else {
-                        Text("Select a run type")
-                            .padding(.top, 30)
-                    }
-                }
-            } else if (searchWasClicked && runningMenuHeight == .large) {
-                HStack {
-                   Image(systemName: "magnifyingglass")
-                       .foregroundColor(.gray)
-                       .padding(Edge.Set([.leading]))
-                   
-                   TextField("Search", text: $searchField)
-                       .multilineTextAlignment(.leading)
-                       .focused($isSearchFieldFocused)
-               }
-               .frame(height: 40)
-               .background(colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray6))
-               .cornerRadius(20)
-               .padding(Edge.Set([.top, .leading, .bottom]))
-                
-               Button("Cancel", action: {
-                   searchWasClicked = false
-                   runningMenuHeight = .height(250)
-               })
-               .padding(Edge.Set([.trailing]))
-           } else {
-                if (!inRunningMode) {
-                    VStack {
-                        HStack {
-                            // button will allow user to search location
-                            Button(action: {
-                                runningMenuHeight = .large
-                                searchWasClicked = true
-                                isSearchFieldFocused = true
-                            })
-                            {
-                                Image(systemName: "magnifyingglass.circle.fill")
-                                    .resizable()
-                                    .frame(width: iconHeightAndWidth, height: iconHeightAndWidth)
-                                    .foregroundColor(Color.gray)
-                                    .overlay(content: {
-                                        Circle()
-                                            .stroke(.black, lineWidth: 1)
-                                    })
-                                    .padding()
-                            }                                                        
-                            
-                            Spacer()
-                            
-                            VStack {
-                                Button(action: {
-                                    inRunningMode = true
-                                    locationManager.distance = 0
-                                    locationManager.startTracking()
-                                    isTimerPaused = false
-                                    isPaused = false
-                                    currentTimer = 0
-                                    isRunDone = false
-                                    runData.startTime = Date()
-                                }) {
-                                    Circle()
-                                        .frame(width: 120, height: 120)
-                                        .foregroundColor(Color.green)
-                                        .overlay(content: {
-                                            Circle()
-                                                .stroke(Color(.black), lineWidth: 2)
-                                        })
-                                        .overlay {
-                                            Text("GO")
-                                                .foregroundColor(Color.black)
-                                                .fontWeight(.bold)
-                                                .font(.title)
-                                        }
-                                        .padding()
-                                }
-                            }
-                            
-                            Spacer()
-                            
-                            // this will locate the user based on the phone gps
-                            Button(action: {
-//                                region.checkLocationAuthorization()
-                                
-                                withAnimation {
-                                    region.centerOnUser()
-                                }
-                                
-                            }) {
-                                Image(systemName: "location.circle.fill")
-                                    .resizable()
-                                    .frame(width: iconHeightAndWidth, height: iconHeightAndWidth)
-                                    .foregroundColor(Color.blue)
-                                    .overlay(content: {
-                                        Circle()
-                                            .stroke(.black, lineWidth: 1)
-                                    })
-                                    .padding()
-                                //                                            .border(Color.blue, width: 1)
-                            }
-                        }
-//                        Button(action: {
-//                            loginManager.isLoggedIn = false
-//                        }) {
-//                            Text("Sign Out")
-//                        }
-                    }
-                } else {
-                    VStack {
-
-                        if (selectedRun != nil) {
-
-                            VStack(alignment: .leading) {
-                                Text("Distance: \(twoDecimalPlaceRunArray[0]).\(twoDecimalPlaceRunArray[1]) mi")
-                                Text("Time: \(minute):\(seconds)")
-                                Text(minPerMile)
-                            }
-                            .font(.title2)
-                            .foregroundColor(colorScheme == .dark ? .white : .black)
-                            .bold()
-                            .padding(.top, 30)
-                        } else {
-                            Text("Select a run type")
-                            .padding()
-                        }
-                        HStack {
-
-                        // button will allow user to search location
+                        // PAUSE BUTTON
                         Button(action: {
-                            isImagePickerPresented = true
-                        })
-                        {
-                            Image(systemName: "camera.circle.fill")
-                                .resizable()
-                                .frame(width: iconHeightAndWidth, height: iconHeightAndWidth)
-                                .foregroundColor(Color.gray)
-                                .overlay(content: {
-                                    Circle()
-                                        .stroke(.black, lineWidth: 1)
-                                })
-                                .padding()
-                        }
-                        .disabled(!isCameraAvailable)
-                        .onAppear(perform: checkCameraAvailability)
-                        .sheet(isPresented: $isImagePickerPresented) {
-                            ImagePicker(sourceType: .camera) { image in
-                                // Handle the captured image here (optional)
-                                do {
-                                    if let image = image {
-                                        saveImageToPhotoLibrary(image: image)
-                                    }
-                                } catch {
-                                    print("not working")
-                                }
-                            }
-                        }
-
-                        Spacer()
-
-                        VStack {
-                            if (isPaused) {
-                                Button(action: {}){
-                                    Circle()
-                                    .frame(width: 120, height: 120)
-                                    .foregroundColor(Color.orange)
-                                    .overlay(content: {
-                                        Circle()
-                                            .stroke(.black, lineWidth: 2)
-                                    })
-                                    .overlay {
-                                        Text("Paused")
-                                            .foregroundColor(Color.black)
-                                            .fontWeight(.bold)
-                                            .font(.title)
-                                    }
-                                    .padding()
-                                }
-                                .simultaneousGesture(LongPressGesture(minimumDuration: cancelTimer).onEnded { _ in
-                                    prevRunMinute = minute
-                                    prevRunSecond = seconds
-                                    prevRunDistance = locationManager.convertToMiles()
-                                    inRunningMode = false
-                                    locationManager.stopTracking()
-                                    isTimerPaused = true
-                                    currentTimer = 0
-                                    generator.prepare()
-                                    generator.selectionChanged()
-//                                    if (locationManager.distance > minRunDistance) {
-                                        isRunDone = true
-//                                    }
-                                })
-                                .simultaneousGesture(TapGesture().onEnded {
-                                    isPaused = false
-                                    locationManager.startTracking()
-                                    isTimerPaused = false
-                                })
-                            } else {
-                                Button(action: {}) {
-                                    Circle()
-                                    .frame(width: 120, height: 120)
-                                    .foregroundColor(Color.yellow)
-                                    .overlay(content: {
-                                        Circle()
-                                            .stroke(.black, lineWidth: 2)
-                                    })
-                                    .overlay {
-                                        Text("Pause")
-                                            .foregroundColor(Color.black)
-                                            .fontWeight(.bold)
-                                            .font(.title)
-                                    }
-                                    .padding()
-                            }
-                                .simultaneousGesture(LongPressGesture(minimumDuration: cancelTimer).onEnded { _ in
-                                prevRunMinute = minute
-                                prevRunSecond = seconds
-                                prevRunDistance = locationManager.convertToMiles()
-                                inRunningMode = false
-                                locationManager.stopTracking()
-                                isTimerPaused = true
-                                currentTimer = 0
-                                generator.prepare()
-                                generator.selectionChanged()
-//                                if (locationManager.distance > minRunDistance) {
-                                    isRunDone = true
-//                                }
-                            })
-                            .simultaneousGesture(TapGesture().onEnded {
-                                isPaused = true
-                                locationManager.pauseTracking()
-                                isTimerPaused = true
-                            })
-                            }
-                        }
-                        Spacer()
-
-                        // this will locate the user based on the phone gps
-                        Button(action: {
-                            print("location clicked")
-//                            region.checkLocationAuthorization()
-                            
-                            withAnimation {
-                                region.centerOnUser()
-                            }
+                            isPaused = true
+                            locationManager.pauseTracking()
+                            isTimerPaused = true
                         }) {
-                            Image(systemName: "location.circle.fill")
-                                .resizable()
-                                .frame(width: iconHeightAndWidth, height: iconHeightAndWidth)
-                                .foregroundColor(Color.blue)
-                                .overlay(content: {
-                                    Circle()
-                                        .stroke(.black, lineWidth: 1)
-                                })
-                                .padding()
+                            ZStack {
+                                Circle()
+                                    .fill(Color.yellow)
+                                    .frame(width: 80, height: 80)
+                                    .shadow(color: .yellow.opacity(0.3), radius: 8)
+                                
+                                Image(systemName: "pause.fill")
+                                    .font(.title)
+                                    .foregroundColor(.white)
                             }
                         }
                     }
                 }
+                .padding(.bottom, 20)
             }
-       }
+        }
+        .padding()
         .onReceive(timer) { _ in
-            if (!isTimerPaused) {
+            if !isTimerPaused {
                 currentTimer += 0.1
-                if Int(currentTimer) % 3 == 0 {
+                // Simple pace calc for display update every 3 seconds
+                 if Int(currentTimer) % 3 == 0 {
                     prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: currentTimer / 60)
                 }
             }
@@ -467,22 +285,85 @@ struct RunInfoView: View {
         .alert(isPresented: $showAlert) {
             Alert(title: Text(alertTitle), message: Text(alertDetails), dismissButton: .default(Text("OK")))
         }
-        .onAppear(perform: checkCameraAvailability)
+        .sheet(isPresented: $isImagePickerPresented) {
+            ImagePicker(sourceType: .camera) { image in
+                if let image = image { saveImageToPhotoLibrary(image: image) }
+            }
+        }
+        .onAppear { checkCameraAvailability() }
+    }
+    
+    // MARK: - Subviews & Logic
+    
+    func SummaryRow(icon: String, title: String, value: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(.blue)
+                .frame(width: 24)
+            Text(title).foregroundColor(.secondary)
+            Spacer()
+            Text(value).bold()
+        }
+    }
+    
+    func startRun() {
+        inRunningMode = true
+        locationManager.distance = 0
+        locationManager.startTracking()
+        isTimerPaused = false
+        isPaused = false
+        currentTimer = 0
+        isRunDone = false
+        runData.startTime = Date()
+    }
+    
+    func finishRun(minute: Int, seconds: String) {
+        prevRunMinute = minute
+        prevRunSecond = seconds
+        prevRunDistance = locationManager.convertToMiles()
+        inRunningMode = false
+        locationManager.stopTracking()
+        isTimerPaused = true
+        currentTimer = 0
+        generator.prepare()
+        generator.selectionChanged()
+        isRunDone = true
+    }
+    
+    func saveRunAction() {
+        currentDate = Date()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+        
+        runData.averagePace = prevRunMinPerMile
+        runData.distance = prevRunDistance
+        runData.time = Double(prevRunMinute) + (Double(prevRunSecond) ?? 0)/60
+        runData.dateString = dateFormatter.string(from: currentDate)
+        
+        Task {
+            await uploadUserRun()
+        }
+        
+        healthStore.saveRun(
+            startTime: runData.startTime,
+            endTime: Date(),
+            distanceInMiles: prevRunDistance,
+            calories: 0
+        ) { success, error in
+            if success { print("Run saved to HealthKit!") }
+        }
     }
     
     private func checkCameraAvailability() {
         AVCaptureDevice.requestAccess(for: .video) { granted in
-            DispatchQueue.main.async {
-                self.isCameraAvailable = granted
-            }
+            DispatchQueue.main.async { self.isCameraAvailable = granted }
         }
     }
     
     private func saveImageToPhotoLibrary(image: UIImage) {
         PHPhotoLibrary.requestAuthorization { status in
-            if status == .authorized {
-                UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-            }
+            if status == .authorized { UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil) }
         }
     }
     
@@ -490,55 +371,36 @@ struct RunInfoView: View {
         prevRunMinute = 0
         prevRunSecond = ""
         prevRunDistance = 0
-        generator.prepare()
-        generator.selectionChanged()
-//                                    if (locationManager.distance > minRunDistance) {
         isRunDone = false
     }
     
     private func calculateMilesPerMinute(distance: Double, time: Double) -> String {
-        // Check for valid inputs
-        if time <= 0 {
-            return "Error: Time must be greater than 0"
-        }
-        if distance < 0 {
-            return "Error: Distance cannot be negative"
-        }
-        if distance > 0 {
-            let minutesPerMile = time / distance
-            let wholeMinutes = Int(minutesPerMile)  // e.g., 6
-            let seconds = Int((minutesPerMile - Double(wholeMinutes)) * 60)  // e.g., 24
-            prevRunMinPerMile = String(format: "%d:%02d minutes per mile", wholeMinutes, seconds)
-            return String(format: "%d:%02d minutes per mile", wholeMinutes, seconds)
-        }
-        return prevRunMinPerMile
+        if time <= 0 { return "0:00" }
+        if distance <= 0 { return prevRunMinPerMile }
+        
+        let minutesPerMile = time / distance
+        let wholeMinutes = Int(minutesPerMile)
+        let seconds = Int((minutesPerMile - Double(wholeMinutes)) * 60)
+        return String(format: "%d:%02d", wholeMinutes, seconds)
     }
     
     private func uploadUserRun() async {
-//        let ref = Database.database().reference()
-        let ref = try await db.collection("users")
-//        let userRef = ref.child("users").child(Auth.auth().currentUser?.uid ?? "Unknown")
+        let ref = try? await db.collection("users")
         
         do {
             let jsonData = try JSONEncoder().encode(runData)
-//            let jsonString = String(data: jsonData, encoding: .utf8)
-//            ref.addDocument(data: jsonString)
             let json = try JSONSerialization.jsonObject(with: jsonData, options: [])
-            if let dict = json as? [String: Any] {
+            if let dict = json as? [String: Any], let ref = ref {
                 if let currentUser = Auth.auth().currentUser {
                     try await ref.document(currentUser.uid).collection("runData").addDocument(data: dict)
-//                    try await ref.document(currentUser.uid).setData(dict)
-//                    try await ref.document(currentUser.uid).setData(dict)
                 }
             }
             clearRunInformation()
             showAlert = true
-            alertTitle = "Run being saved to your account!"
-            alertDetails = "Run is being saved to your account. You can view your runs in the 'My Runs' tab."
+            alertTitle = "Success"
+            alertDetails = "Run saved to your account!"
         } catch {
             print("Error encoding data: \(error)")
         }
     }
-    
-    
 }

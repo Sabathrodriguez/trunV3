@@ -2,7 +2,7 @@
 //  LoginScreen.swift
 //  trun
 //
-//  Created by Sabath  Rodriguez on 1/8/25.
+//  Created by Sabath Rodriguez on 1/8/25.
 //
 
 import SwiftUI
@@ -12,6 +12,8 @@ import FirebaseAuth
 import GoogleSignIn
 import GoogleSignInSwift
 import Foundation
+import AuthenticationServices
+import CryptoKit
 
 struct LoginView: View {
     @State private var error: String = ""
@@ -19,124 +21,177 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isAuthenticated = false
     @State private var forgotpassword = false
+    @State private var currentNonce: String?
     
     @Environment(\.colorScheme) var colorScheme
     
     @ObservedObject var loginManager: LoginManager
     
     var body: some View {
-        VStack {
-            VStack {
-                // Username TextField
-                TextField("Username", text: $username)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(5.0)
+        ZStack {
+            // BACKGROUND IMAGE
+            // Assuming "freedom" exists in Assets.xcassets
+            Image("freedom")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .edgesIgnoringSafeArea(.all)
+                .overlay(Color.black.opacity(0.4)) // Dark overlay for text readability
+            
+            VStack(spacing: 20) {
+                Spacer()
+                
+                // LOGO / TITLE
+                Text("trun")
+                    .font(.system(size: 60, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white)
+                    .shadow(radius: 10)
                     .padding(.bottom, 20)
                 
-                // Password SecureField
-                SecureField("Password", text: $password)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(5.0)
-                    .padding(.bottom, 20)
-                
-                VStack {
-                    // Login Button
+                VStack(spacing: 15) {
+                    // INPUT FIELDS
+                    TextField("Email", text: $username)
+                        .padding()
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(12)
+                        .autocapitalization(.none)
+                        .keyboardType(.emailAddress)
+                        .foregroundColor(.white) // Ensure text is visible
+                        .accentColor(.white)
+                    
+                    SecureField("Password", text: $password)
+                        .padding()
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(12)
+                        .foregroundColor(.white)
+                        .accentColor(.white)
+                    
+                    // LOGIN BUTTON
                     Button(action: {
-                        if (authenticateUser()) {
+                        if authenticateUser() {
                             signIn(email: username, password: password)
                         }
                     }) {
                         Text("Sign In")
                             .font(.headline)
                             .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
                             .padding()
-                            .frame(width: 220, height: 50)
                             .background(Color.blue)
-                            .cornerRadius(15.0)
-                    }
-                                        
-                    VStack {
-                        //Signup Button
-                        Button(action: {
-                            // Here, you would typically validate credentials
-                            // For this example, we'll just set `isLoggedIn` to true
-                            
-                            if (authenticateUser()) {
-                                signUp(email: username, password: password)
-                            }
-                        }) {
-                            Text("Sign Up")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding()
-                                .frame(width: 220, height: 50)
-                                .background(Color.blue)
-                                .cornerRadius(15.0)
-                        }
-                        Text("Password must contain 1 special character and 1 number.")
-                            .font(.caption2)
+                            .cornerRadius(12)
                     }
                     
+                    // SIGN UP BUTTON
                     Button(action: {
-                        forgotpassword = true
+                        if authenticateUser() {
+                            signUp(email: username, password: password)
+                        }
                     }) {
-                        Text("Forgot Password?")
-                            .font(.caption)
-                            .foregroundColor(.red)
+                        Text("Create Account")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white.opacity(0.2))
+                            .cornerRadius(12)
                     }
                     
-                    // sign in with google button
-                    VStack {
-                        Button(action: {
+                    Text("Password must contain 1 special character and 1 number.")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(.horizontal, 30)
+                
+                Button("Forgot Password?") {
+                    forgotpassword = true
+                }
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .padding(.top)
+                
+                Spacer()
+                
+                // GOOGLE SIGN IN
+                VStack {
+                    Button(action: {
+                        Task {
+                            do {
+                                try await googleOauth()
+                            } catch {
+                                self.error = error.localizedDescription
+                            }
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "globe")
+                            Text("Continue with Google")
+                        }
+                        .foregroundColor(.black)
+                        .font(.headline)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white)
+                        .cornerRadius(25)
+                        .padding(.horizontal, 30)
+                    }
+                    
+                    // APPLE SIGN IN
+                    SignInWithAppleButton(.signIn, onRequest: { request in
+                        let nonce = randomNonceString()
+                        currentNonce = nonce
+                        request.requestedScopes = [.fullName, .email]
+                        request.nonce = sha256(nonce)
+                    }, onCompletion: { result in
+                        switch result {
+                        case .success(let authorization):
                             Task {
                                 do {
-                                    try await googleOauth()
+                                    try await appleSignIn(authorization: authorization)
                                 } catch {
                                     self.error = error.localizedDescription
                                 }
                             }
-                        }) {
-                            HStack {
-                                Image(systemName: "person.badge.key.fill")
-                                Text("Sign in with Google")
-                            }
-                            .padding()
+                        case .failure(let err):
+                            self.error = err.localizedDescription
                         }
-                        .buttonStyle(.borderedProminent)
-                        
-                        if !error.isEmpty {
-                            Text(error).foregroundColor(.red).font(.caption)
-                        }
+                    })
+                    .signInWithAppleButtonStyle(.white)
+                    .frame(height: 50)
+                    .cornerRadius(25)
+                    .padding(.horizontal, 30)
+
+                    if !error.isEmpty {
+                        Text(error).foregroundColor(.red).font(.caption).padding(.top)
                     }
+                }
+                .padding(.bottom, 40)
+            }
+        }
+        .sheet(isPresented: $forgotpassword) {
+            VStack(spacing: 20) {
+                Text("Reset Password")
+                    .font(.title2.bold())
+                
+                TextField("Enter your email", text: $username)
+                    .padding()
+                    .autocapitalization(.none)
+                    .keyboardType(.emailAddress)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                
+                Button(action: {
+                    resetPassword()
+                }) {
+                    Text("Send Reset Link")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(12)
                 }
             }
             .padding()
-            .sheet(isPresented: $forgotpassword) {
-                VStack {
-                    TextField("Email:", text: $username)
-                        .padding()
-                        .autocapitalization(.none)
-                        .keyboardType(.emailAddress)
-                        .background(colorScheme == .dark ? Color(.systemGray4) : Color(.systemGray6))
-                        .cornerRadius(20)
-                    Button(action: {
-                        resetPassword()
-                    }) {
-                        Text("Send Reset Link")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding()
-                            .frame(width: 250, height: 50)
-                            .background(Color.blue)
-                            .cornerRadius(15.0)
-                    }
-                    .padding()
-                }
-                    .presentationDetents([.medium])
-            }
-            
+            .presentationDetents([.medium])
         }
     }
         
@@ -174,10 +229,8 @@ struct LoginView: View {
         }
         
         let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: user.accessToken.tokenString)
-        var authResult = try await Auth.auth().signIn(with: credential)
-        // Handle authResult (e.g., update UI to show logged-in user)
+        let _ = try await Auth.auth().signIn(with: credential)
         loginManager.isLoggedIn = true
-        
     }
         
     func logout() async throws {
@@ -186,15 +239,10 @@ struct LoginView: View {
     }
         
     func authenticateUser() -> Bool {
-        // Here you would typically check against a backend service
-        // For demonstration, we'll just check if both fields are not empty
         if (checkEmail(email: username) && checkPassword(password: password)) {
             return true
-//            signIn(email: username, password: password)
         } else {
-            // Handle error, e.g., show an alert
             return false
-            
         }
     }
     
@@ -212,7 +260,6 @@ struct LoginView: View {
         if (password.count < 6) {
             return false
         }
-        // check for 1 special character
         let nonAlphanumericCharacters = CharacterSet.alphanumerics.inverted
         if password.rangeOfCharacter(from: nonAlphanumericCharacters) == nil {
             return false
@@ -221,7 +268,6 @@ struct LoginView: View {
         if password.rangeOfCharacter(from: digitsCharacters) == nil {
             return false
         }
-        
         return true
     }
     
@@ -245,6 +291,42 @@ struct LoginView: View {
                 print("User signed in successfully")
             }
         }
+    }
+
+    func appleSignIn(authorization: ASAuthorization) async throws {
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let nonce = currentNonce,
+              let appleIDToken = appleIDCredential.identityToken,
+              let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+            print("Unable to fetch Apple ID token")
+            return
+        }
+
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idTokenString,
+            rawNonce: nonce,
+            fullName: appleIDCredential.fullName
+        )
+        let _ = try await Auth.auth().signIn(with: credential)
+        loginManager.isLoggedIn = true
+    }
+
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+        }
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        let nonce = randomBytes.map { byte in charset[Int(byte) % charset.count] }
+        return String(nonce)
+    }
+
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        return hashedData.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
 

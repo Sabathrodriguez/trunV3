@@ -93,162 +93,183 @@ struct ContentView: View {
     
     var runningMenuHeights = Set([PresentationDetent.height(250), PresentationDetent.height(100), PresentationDetent.large])
     
-    
     var body: some View {
-        
-        ZStack {
-            Map(position: $viewModel.regionView) {
-                
-                UserAnnotation()
-                
-                if let coords = routeConverter.convertGPXToRoute(filePath: selectedRoute.GPXFileURL) {
-                    MapPolyline(coordinates: coords)
-                        .stroke(Color(red: selectedRoute.color[0], green: selectedRoute.color[1], blue: selectedRoute.color[2]), lineWidth: 2)
-                }
-                
-                
-                ForEach(runners) { runner in
-                    if runner.routeID == selectedRoute.id {
-                        Annotation(runner.name, coordinate: runner.location) {
-                            Circle()
-                                .foregroundColor(runner.color)
+            ZStack {
+                // MAP LAYER
+                Map(position: $viewModel.regionView) {
+                    UserAnnotation()
+                    
+                    if let coords = routeConverter.convertGPXToRoute(filePath: selectedRoute.GPXFileURL) {
+                        MapPolyline(coordinates: coords)
+                            .stroke(Color(red: selectedRoute.color[0], green: selectedRoute.color[1], blue: selectedRoute.color[2]), lineWidth: 4) // Thicker line
+                    }
+                    
+                    ForEach(runners) { runner in
+                        if runner.routeID == selectedRoute.id {
+                            Annotation(runner.name, coordinate: runner.location) {
+                                Circle()
+                                    .foregroundColor(runner.color)
+                                    .frame(width: 12, height: 12)
+                                    .shadow(radius: 2)
+                            }
                         }
                     }
                 }
-            }
-            .mapControls {
-                MapCompass()
-            }
-            .id(selectedRoute)
-            .id(runners)
-            .edgesIgnoringSafeArea(.all)
-            .onAppear {
-                viewModel.checkIfLocationServicesEnabled()
-                requestHealthKitAccess()
-            }
-            .onChange(of: selectedRoute) { _ in
-                viewModel.centerOnUser()
-//                position
-            }
-            .sheet(isPresented: $showSheet) {
+                .mapControls {
+                    MapCompass()
+                }
+                .edgesIgnoringSafeArea(.all)
+                .onAppear {
+                    viewModel.checkIfLocationServicesEnabled()
+                    requestHealthKitAccess()
+                }
+                .onChange(of: selectedRoute) { _ in
+                    viewModel.centerOnUser()
+                }
+                
+                // UI OVERLAY LAYER
                 VStack {
-                    RunView(selectedRun: $selectedRun,
-                            runTypeDict: $runTypeDict,
-                            runningMenuHeight: $runningMenuHeight,
-                            searchWasClicked: $searchWasClicked,
-                            userRegion: viewModel,
-                            loginManager: loginManager,
-                            healthStore: healthStore,
-                            routes: $routes,           // Pass routes binding
-                            selectedRoute: $selectedRoute, // Pass selectedRoute binding,
-                            showAlert: $showAlert,
-                            alertTitle: $alertTitle,
-                            alertDetails: $alertDetails
-                        )
-                        .presentationBackgroundInteraction(.enabled)
-                        .presentationDetents(runningMenuHeights, selection: $runningMenuHeight)
-                        .interactiveDismissDisabled(true)
-                        .onChange(of: runningMenuHeight) { newHeight in
-                            if (newHeight == .height(100) || newHeight == .height(250)) {
+                    Spacer()
+                }
+                .sheet(isPresented: $showSheet) {
+                    ZStack {
+                        // Custom Background for Sheet
+                        Color(UIColor.systemBackground).opacity(0.8)
+                            .background(.ultraThinMaterial)
+                            .ignoresSafeArea()
+                        
+                        VStack(spacing: 20) {
+                            
+//                            // Drag Indicator
+//                            Capsule()
+//                                .frame(width: 40, height: 4)
+//                                .foregroundColor(.gray.opacity(0.5))
+//                                .padding(.top, 10)
+
+                            RunView(
+                                selectedRun: $selectedRun,
+                                runTypeDict: $runTypeDict,
+                                runningMenuHeight: $runningMenuHeight,
+                                searchWasClicked: $searchWasClicked,
+                                userRegion: viewModel,
+                                loginManager: loginManager,
+                                healthStore: healthStore,
+                                routes: $routes,
+                                selectedRoute: $selectedRoute,
+                                showAlert: $showAlert,
+                                alertTitle: $alertTitle,
+                                alertDetails: $alertDetails
+                            )
+                            
+                            // ROUTE SELECTION CAROUSEL (Visible when expanded)
+                            if runningMenuHeight == .large {
+                                VStack(alignment: .leading) {
+                                    Text("Select Route")
+                                        .font(.headline)
+                                        .padding(.horizontal)
+                                    
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 15) {
+                                            if let routeList = routes["Run Detroit"] {
+                                                ForEach(routeList) { route in
+                                                    Button(action: {
+                                                        selectedRoute = route
+                                                    }) {
+                                                        VStack(alignment: .leading) {
+                                                            Text(route.name)
+                                                                .font(.system(size: 16, weight: .bold))
+                                                                .foregroundColor(.primary)
+                                                            Text("\(route.GPXFileURL)") // Or distance if available
+                                                                .font(.caption)
+                                                                .foregroundColor(.secondary)
+                                                        }
+                                                        .padding()
+                                                        .frame(width: 160, height: 80)
+                                                        .background(
+                                                            RoundedRectangle(cornerRadius: 16)
+                                                                .fill(Color(UIColor.secondarySystemBackground))
+                                                                .shadow(color: selectedRoute.id == route.id ? Color.blue.opacity(0.4) : Color.clear, radius: 8)
+                                                                .overlay(
+                                                                    RoundedRectangle(cornerRadius: 16)
+                                                                        .stroke(selectedRoute.id == route.id ? Color.blue : Color.clear, lineWidth: 2)
+                                                                )
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .padding(.horizontal)
+                                    }
+                                }
+                                .padding(.bottom)
+                                
+                                // IMPORT / EXPORT CONTROLS
+                                HStack(spacing: 30) {
+                                    // Import Button
+                                    Button(action: { isFileImporterPresented = true }) {
+                                        Label("Import GPX", systemImage: "folder.badge.plus")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                            .padding()
+                                            .background(Color.blue)
+                                            .cornerRadius(12)
+                                    }
+                                    
+                                    // Record/Save Button
+                                    Button(action: {
+                                        if locationManager.isRecording {
+                                            locationManager.stopRecording()
+                                            let gpxString = locationManager.createGPXString()
+                                            gpxDocument = GPXDocument(text: gpxString)
+                                            isFileExporterPresented = true
+                                        } else {
+                                            locationManager.startRecording()
+                                        }
+                                    }) {
+                                        Label(locationManager.isRecording ? "Stop & Save" : "Rec New Route",
+                                              systemImage: locationManager.isRecording ? "stop.circle.fill" : "record.circle")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                            .padding()
+                                            .background(locationManager.isRecording ? Color.red : Color.orange)
+                                            .cornerRadius(12)
+                                    }
+                                }
+                                .padding(.bottom, 30)
+                            }
+                        }
+                    }
+                    .presentationDetents(runningMenuHeights, selection: $runningMenuHeight)
+                    .presentationBackgroundInteraction(.enabled)
+                    .presentationCornerRadius(25)
+                    .presentationBackground(.ultraThinMaterial) // Glass effect
+                    .interactiveDismissDisabled(true)
+                    .onChange(of: runningMenuHeight) { newHeight in
+                        if (newHeight == .height(100) || newHeight == .height(250)) {
                             searchWasClicked = false
                         }
                     }
-                    if (runningMenuHeight == .large) {
-                        List {
-                            Picker("Run Options", selection: $selectedRoute) {
-                                if let routeList = routes["Run Detroit"] {
-                                    ForEach(routeList) { route in
-                                        Text(route.name).tag(route)
-                                    }
-                                }
-                            }
+                    // ... [Keep file importer/exporter modifiers] ...
+                    .fileImporter(
+                        isPresented: $isFileImporterPresented,
+                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                        allowsMultipleSelection: false
+                    ) { result in
+                        if case .success(let urls) = result, let url = urls.first {
+                            importGPX(from: url)
                         }
-                        
-                        Button(action: {
-                            isFileImporterPresented = true
-                        }) {
-                            HStack {                                
-                                
-                                Image(systemName: "folder.badge.plus")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: iconHeightAndWidth * 0.6, height: iconHeightAndWidth * 0.6) // Slightly smaller icon inside circle
-                                    .foregroundColor(Color.gray)
-                                    .padding(10)
-                                    .overlay(content: {
-                                        Circle()
-                                            .stroke(.black, lineWidth: 1)
-                                            .frame(width: iconHeightAndWidth, height: iconHeightAndWidth)
-                                    })
-                                    .padding()
-                            }
-                            .fileImporter(
-                                isPresented: $isFileImporterPresented,
-                                allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
-                                allowsMultipleSelection: false
-                            ) { result in
-                                switch result {
-                                case .success(let urls):
-                                    if let url = urls.first {
-                                        importGPX(from: url)
-                                    }
-                                case .failure(let error):
-                                    print("Error importing file: \(error.localizedDescription)")
-                                }
-                            }
-                            .padding()
-                            
-                            Button(action: {
-                                if locationManager.isRecording {
-                                    // STOP RECORDING
-                                    locationManager.stopRecording()
-                                    // Generate GPX String
-                                    let gpxString = locationManager.createGPXString()
-                                    // Prepare Document
-                                    gpxDocument = GPXDocument(text: gpxString)
-                                    // Trigger Export
-                                    isFileExporterPresented = true
-                                } else {
-                                    // START RECORDING
-                                    locationManager.startRecording()
-                                }
-                            }) {
-                                Image(systemName: locationManager.isRecording ? "stop.circle.fill" : "mappin.and.ellipse.circle.fill")
-                                    .resizable()
-                                    .frame(width: iconHeightAndWidth, height: iconHeightAndWidth)
-                                    .foregroundColor(locationManager.isRecording ? Color.red : Color.blue)
-                                    .overlay(content: {
-                                        Circle()
-                                        .stroke(.black, lineWidth: 1)
-                                })
-                                .padding()
-                            }
-                            // File Exporter Modifier
-                            .fileExporter(
-                                isPresented: $isFileExporterPresented,
-                                document: gpxDocument,
-                                contentType: UTType(filenameExtension: "gpx") ?? .xml,
-                                defaultFilename: "MyRun.gpx"
-                            ) { result in
-                                switch result {
-                                case .success(let url):
-                                    print("Saved to \(url)")
-                                    alertTitle = "Success"
-                                    alertDetails = "Run saved successfully!"
-                                    showAlert = true
-                                case .failure(let error):
-                                    print("Export failed: \(error.localizedDescription)")
-                                    alertTitle = "Error"
-                                    alertDetails = "Failed to save file."
-                                    showAlert = true
-                                }
-                            }
-                        }
+                    }
+                    .fileExporter(
+                        isPresented: $isFileExporterPresented,
+                        document: gpxDocument,
+                        contentType: UTType(filenameExtension: "gpx") ?? .xml,
+                        defaultFilename: "MyRun.gpx"
+                    ) { result in
+                         // handle result
                     }
                 }
             }
         }
-    }
     
     func requestHealthKitAccess() {
         healthStore.requestAuthorization{

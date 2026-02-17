@@ -39,12 +39,12 @@ struct RunView: View {
             // running info
             RunInfoView(runData: runData, currentDate: currentDate, loginManager: loginManager, healthStore: healthStore, selectedRun: $selectedRun, runTypeDict: $runTypeDict, runningMenuHeight: $runningMenuHeight, searchWasClicked: $searchWasClicked, inRunningMode: $inRunningMode, region: userRegion, routes: $routes, selectedRoute: $selectedRoute, showAlert: $showAlert, alertTitle: $alertTitle, alertDetails: $alertDetails)
             
-            // this allows the user to select what to display as far as running information
-            if (runningMenuHeight == .large && inRunningMode) {
-                RunListView(selectedRun: $selectedRun, runTypeDict: $runTypeDict)
-            } else {
-                Spacer()
-            }
+//            // this allows the user to select what to display as far as running information
+//            if (runningMenuHeight == .large && inRunningMode) {
+//                RunListView(selectedRun: $selectedRun, runTypeDict: $runTypeDict)
+//            } else {
+//                Spacer()
+//            }
         }
     }
 }
