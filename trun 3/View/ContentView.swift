@@ -127,6 +127,26 @@ struct ContentView: View {
                     viewModel.centerOnUser()
                 }
                 
+                // PROFILE MENU OVERLAY
+                VStack {
+                    HStack {
+                        Spacer()
+                        Menu {
+                            Button(role: .destructive, action: { loginManager.logout() }) {
+                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        } label: {
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.white)
+                                .shadow(radius: 4)
+                                .padding(.trailing, 16)
+                                .padding(.top, 50)
+                        }
+                    }
+                    Spacer()
+                }
+
                 // UI OVERLAY LAYER
                 VStack {
                     Spacer()

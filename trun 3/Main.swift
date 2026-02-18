@@ -38,6 +38,10 @@ class LoginManager : ObservableObject {
             }
         }
     }
+
+    func logout() {
+        try? Auth.auth().signOut()
+    }
 }
 
 struct MainView : View {
