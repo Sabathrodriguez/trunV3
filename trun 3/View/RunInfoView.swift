@@ -53,6 +53,7 @@ struct RunInfoView: View {
     @State private var isImagePickerPresented = false
     
     @State var isRunDone: Bool = false
+    @State var isSaving: Bool = false
     @State var prevRunDistance: Double = 0
     @State var prevRunMinute: Int = 0
     @State var prevRunSecond: String = ""
@@ -102,15 +103,16 @@ struct RunInfoView: View {
                         Button(action: {
                             saveRunAction()
                         }) {
-                            Text("Save Run")
+                            Text(isSaving ? "Saving..." : "Save Run")
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.blue)
+                                .background(isSaving ? Color.blue.opacity(0.5) : Color.blue)
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
                                 .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 5)
                         }
+                        .disabled(isSaving)
                     }
                 }
                 .padding(.horizontal)
@@ -331,20 +333,23 @@ struct RunInfoView: View {
     }
     
     func saveRunAction() {
+        guard !isSaving else { return }
+        isSaving = true
+
         currentDate = Date()
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .short
-        
+
         runData.averagePace = prevRunMinPerMile
         runData.distance = prevRunDistance
         runData.time = Double(prevRunMinute) + (Double(prevRunSecond) ?? 0)/60
         runData.dateString = dateFormatter.string(from: currentDate)
-        
+
         Task {
             await uploadUserRun()
         }
-        
+
         healthStore.saveRun(
             startTime: runData.startTime,
             endTime: Date(),
@@ -372,6 +377,7 @@ struct RunInfoView: View {
         prevRunSecond = ""
         prevRunDistance = 0
         isRunDone = false
+        isSaving = false
     }
     
     private func calculateMilesPerMinute(distance: Double, time: Double) -> String {
