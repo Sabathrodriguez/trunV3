@@ -24,9 +24,6 @@ final class UserLocation: NSObject, ObservableObject, CLLocationManagerDelegate 
             locationManager = CLLocationManager()
             locationManager?.delegate = self
             locationManager?.desiredAccuracy = kCLLocationAccuracyBest
-            
-            // FIX 1: Turn on the Compass!
-            locationManager?.startUpdatingHeading()
         }
     }
     
@@ -35,12 +32,7 @@ final class UserLocation: NSObject, ObservableObject, CLLocationManagerDelegate 
         
         switch locationManager.authorizationStatus {
             case .authorizedWhenInUse, .authorizedAlways:
-                // FIX 2: Ensure we don't overwrite the tracking mode with a static region
-                // (Use the fix provided in the previous turn here)
                 regionView = .userLocation(followsHeading: true, fallback: .automatic)
-                
-                // Optional: Force heading updates again just to be safe
-                locationManager.startUpdatingHeading()
                 break
             case .denied, .restricted, .notDetermined:
                 break
