@@ -5,17 +5,11 @@
 //  Created by Sabath  Rodriguez on 1/22/25.
 //
 
-//import SwiftUI
-//import SwiftData
-//import MapKit
-//import AVFoundation
-//import UIKit
-//import Photos
-//import FirebaseAuth
-//import FirebaseFirestore
+import SwiftData
 import UniformTypeIdentifiers
 
-struct Run: Codable {
+@Model
+final class Run {
     var id: String?
     var time: Double
     var distance: Double
@@ -23,5 +17,15 @@ struct Run: Codable {
     var caloriesBurned: Double
     var dateString: String
     var startTime: Date
+
+    init(id: String? = nil, time: Double, distance: Double, averagePace: String, caloriesBurned: Double, dateString: String, startTime: Date) {
+        self.id = id
+        self.time = time
+        self.distance = distance
+        self.averagePace = averagePace
+        self.caloriesBurned = caloriesBurned
+        self.dateString = dateString
+        self.startTime = startTime
+    }
 }
 

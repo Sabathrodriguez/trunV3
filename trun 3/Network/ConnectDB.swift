@@ -36,5 +36,6 @@ struct trunApp: App {
                 GIDSignIn.sharedInstance.handle(url)
             }
         }
+        .modelContainer(for: Run.self)
     }
 }

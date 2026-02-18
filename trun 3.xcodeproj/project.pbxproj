@@ -58,7 +58,6 @@
 			isa = PBXGroup;
 			children = (
 				10E9823C2D61A5FB00358D21 /* trun 3 */,
-				10E982962D61A6A100358D21 /* Frameworks */,
 				10E9823B2D61A5FB00358D21 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -69,13 +68,6 @@
 				10E9823A2D61A5FB00358D21 /* trun 3.app */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		10E982962D61A6A100358D21 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

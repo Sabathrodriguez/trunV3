@@ -11,12 +11,10 @@ import MapKit
 import AVFoundation
 import UIKit
 import Photos
-import FirebaseAuth
-import FirebaseFirestore
 import UniformTypeIdentifiers
 
 struct RunInfoView: View {
-    let db = Firestore.firestore()
+    @Environment(\.modelContext) private var modelContext
     
     @State var runData: Run
     @State var currentDate: Date
@@ -391,22 +389,15 @@ struct RunInfoView: View {
     }
     
     private func uploadUserRun() async {
-        let ref = try? await db.collection("users")
-        
+        modelContext.insert(runData)
         do {
-            let jsonData = try JSONEncoder().encode(runData)
-            let json = try JSONSerialization.jsonObject(with: jsonData, options: [])
-            if let dict = json as? [String: Any], let ref = ref {
-                if let currentUser = Auth.auth().currentUser {
-                    try await ref.document(currentUser.uid).collection("runData").addDocument(data: dict)
-                }
-            }
+            try modelContext.save()
             clearRunInformation()
             showAlert = true
             alertTitle = "Success"
-            alertDetails = "Run saved to your account!"
+            alertDetails = "Run saved!"
         } catch {
-            print("Error encoding data: \(error)")
+            print("Error saving run: \(error)")
         }
     }
 }
