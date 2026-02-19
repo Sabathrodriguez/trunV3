@@ -41,12 +41,9 @@ struct ContentView: View {
     @ObservedObject var healthStore = HealthStore()
         
     @ObservedObject public var loginManager: LoginManager
-    @State var runners = [
-        Runner(id: 0, name: "alan", iconID: "", location: CLLocationCoordinate2D(latitude: 42.34948396682739, longitude: -83.0350112915039), color: .green, routeID: 0),
-        Runner(id: 1, name: "sabath", iconID: "", location: CLLocationCoordinate2D(latitude: 42.349634254351, longitude: -83.034625053405), color: .blue, routeID: 1),
-        Runner(id: 2, name: "sebas", iconID: "", location: CLLocationCoordinate2D(latitude: 42.3485613707453, longitude: -83.0340027809143), color: .red, routeID: 2),
-        Runner(id: 3, name: "Anon", iconID: "", location: CLLocationCoordinate2D(latitude: 42.34982737340033, longitude: -83.03016185760498), color: .orange, routeID: 0)]
-    
+    @StateObject var liveRunService = LiveRunService()
+    @State var inRunningMode: Bool = false
+
     let db = Firestore.firestore()
     
     @State var routes: [String: [Route]] = ["Run Detroit": [
@@ -104,14 +101,9 @@ struct ContentView: View {
                             .stroke(Color(red: selectedRoute.color[0], green: selectedRoute.color[1], blue: selectedRoute.color[2]), lineWidth: 4) // Thicker line
                     }
                     
-                    ForEach(runners) { runner in
-                        if runner.routeID == selectedRoute.id {
-                            Annotation(runner.name, coordinate: runner.location) {
-                                Circle()
-                                    .foregroundColor(runner.color)
-                                    .frame(width: 12, height: 12)
-                                    .shadow(radius: 2)
-                            }
+                    ForEach(liveRunService.liveRunners) { runner in
+                        Annotation(runner.name, coordinate: runner.location) {
+                            RunnerAnnotationView(runner: runner)
                         }
                     }
                 }
@@ -147,6 +139,19 @@ struct ContentView: View {
                     Spacer()
                 }
 
+                // LEADERBOARD OVERLAY (visible during active runs)
+                if inRunningMode && !liveRunService.liveRunners.isEmpty {
+                    VStack {
+                        HStack {
+                            LeaderboardOverlay(runners: liveRunService.liveRunners)
+                                .padding(.leading, 16)
+                                .padding(.top, 90)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                }
+
                 // UI OVERLAY LAYER
                 VStack {
                     Spacer()
@@ -172,7 +177,9 @@ struct ContentView: View {
                                 runningMenuHeight: $runningMenuHeight,
                                 searchWasClicked: $searchWasClicked,
                                 userRegion: viewModel,
+                                inRunningMode: $inRunningMode,
                                 loginManager: loginManager,
+                                liveRunService: liveRunService,
                                 healthStore: healthStore,
                                 routes: $routes,
                                 selectedRoute: $selectedRoute,
@@ -222,19 +229,36 @@ struct ContentView: View {
                                     }
                                 }
                                 .padding(.bottom)
-                                
-                                // IMPORT / EXPORT CONTROLS
-                                HStack(spacing: 30) {
+
+                                // ROUTE LEADERBOARD
+                                RouteLeaderboardView(
+                                    routeID: selectedRoute.id,
+                                    routeName: selectedRoute.name
+                                )
+                                .padding(.horizontal)
+
+                                // SHARED ROUTE LIBRARY
+                                SharedRouteLibraryView(
+                                    userLocation: viewModel,
+                                    routes: $routes,
+                                    selectedRoute: $selectedRoute
+                                )
+                                .padding(.horizontal)
+
+                                // IMPORT / EXPORT / SHARE CONTROLS
+                                HStack(spacing: 12) {
                                     // Import Button
                                     Button(action: { isFileImporterPresented = true }) {
-                                        Label("Import GPX", systemImage: "folder.badge.plus")
-                                            .font(.headline)
+                                        Label("Import", systemImage: "folder.badge.plus")
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
                                             .foregroundColor(.white)
-                                            .padding()
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 10)
                                             .background(Color.blue)
                                             .cornerRadius(12)
                                     }
-                                    
+
                                     // Record/Save Button
                                     Button(action: {
                                         if locationManager.isRecording {
@@ -242,15 +266,28 @@ struct ContentView: View {
                                             let gpxString = locationManager.createGPXString()
                                             gpxDocument = GPXDocument(text: gpxString)
                                             isFileExporterPresented = true
+
+                                            // Share to the community
+                                            if !gpxString.isEmpty {
+                                                let coords = GPXParser().parse(gpxString: gpxString)
+                                                SharedRouteService().publishRoute(
+                                                    name: "My Route",
+                                                    gpxString: gpxString,
+                                                    distanceMiles: locationManager.convertToMiles(),
+                                                    coordinates: coords
+                                                )
+                                            }
                                         } else {
                                             locationManager.startRecording()
                                         }
                                     }) {
-                                        Label(locationManager.isRecording ? "Stop & Save" : "Rec New Route",
+                                        Label(locationManager.isRecording ? "Stop & Share" : "Record",
                                               systemImage: locationManager.isRecording ? "stop.circle.fill" : "record.circle")
-                                            .font(.headline)
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
                                             .foregroundColor(.white)
-                                            .padding()
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 10)
                                             .background(locationManager.isRecording ? Color.red : Color.orange)
                                             .cornerRadius(12)
                                     }

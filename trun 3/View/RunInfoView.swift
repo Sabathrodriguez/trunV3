@@ -27,7 +27,8 @@ struct RunInfoView: View {
     @Binding var searchWasClicked: Bool
     @Binding var inRunningMode: Bool
     @ObservedObject var region: UserLocation
-    
+    @ObservedObject var liveRunService: LiveRunService
+
     @Binding var routes: [String: [Route]]
     @Binding var selectedRoute: Route
     
@@ -276,9 +277,18 @@ struct RunInfoView: View {
         .onReceive(timer) { _ in
             if !isTimerPaused {
                 currentTimer += 0.1
-                // Simple pace calc for display update every 3 seconds
-                 if Int(currentTimer) % 3 == 0 {
+                let tick = Int(currentTimer * 10)
+                // Update pace every 3 seconds
+                if tick % 30 == 0 {
                     prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: currentTimer / 60)
+                }
+                // Publish location to Firebase every 5 seconds
+                if tick % 50 == 0, inRunningMode, let loc = locationManager.location {
+                    liveRunService.publishLocation(
+                        location: loc,
+                        distanceMiles: locationManager.convertToMiles(),
+                        pace: prevRunMinPerMile
+                    )
                 }
             }
         }
@@ -315,6 +325,10 @@ struct RunInfoView: View {
         currentTimer = 0
         isRunDone = false
         runData.startTime = Date()
+
+        // Start multiplayer session
+        let routeCoords = GPXToRoute().convertGPXToRoute(filePath: selectedRoute.GPXFileURL) ?? []
+        liveRunService.startSession(routeID: selectedRoute.id, routeCoordinates: routeCoords)
     }
     
     func finishRun(minute: Int, seconds: String) {
@@ -328,6 +342,9 @@ struct RunInfoView: View {
         generator.prepare()
         generator.selectionChanged()
         isRunDone = true
+
+        // Stop multiplayer session
+        liveRunService.stopSession()
     }
     
     func saveRunAction() {
@@ -356,6 +373,15 @@ struct RunInfoView: View {
         ) { success, error in
             if success { print("Run saved to HealthKit!") }
         }
+
+        // Save to route leaderboard in Firestore
+        RouteLeaderboardService().saveCompletedRun(
+            routeID: selectedRoute.id,
+            time: runData.time,
+            distance: prevRunDistance,
+            pace: prevRunMinPerMile,
+            routeProgress: 1.0
+        )
     }
     
     private func checkCameraAvailability() {

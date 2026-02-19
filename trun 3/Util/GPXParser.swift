@@ -20,6 +20,11 @@ class GPXParser: NSObject, XMLParserDelegate {
         return coordinates
     }
 
+    func parse(gpxString: String) -> [CLLocationCoordinate2D] {
+        guard let data = gpxString.data(using: .utf8) else { return [] }
+        return parseGPX(data: data)
+    }
+
     // MARK: - XMLParserDelegate
     func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?,
