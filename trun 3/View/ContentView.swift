@@ -233,7 +233,9 @@ struct ContentView: View {
                                 // ROUTE LEADERBOARD
                                 RouteLeaderboardView(
                                     routeID: selectedRoute.id,
-                                    routeName: selectedRoute.name
+                                    routeName: selectedRoute.name,
+                                    liveRunners: liveRunService.liveRunners,
+                                    isRunning: inRunningMode
                                 )
                                 .padding(.horizontal)
 
