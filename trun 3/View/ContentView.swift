@@ -191,42 +191,42 @@ struct ContentView: View {
                             // ROUTE SELECTION CAROUSEL (Visible when expanded)
                             if runningMenuHeight == .large {
                                 VStack(alignment: .leading) {
-                                    Text("Select Route")
-                                        .font(.headline)
-                                        .padding(.horizontal)
+//                                    Text("Select Route")
+//                                        .font(.headline)
+//                                        .padding(.horizontal)
                                     
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 15) {
-                                            if let routeList = routes["Run Detroit"] {
-                                                ForEach(routeList) { route in
-                                                    Button(action: {
-                                                        selectedRoute = route
-                                                    }) {
-                                                        VStack(alignment: .leading) {
-                                                            Text(route.name)
-                                                                .font(.system(size: 16, weight: .bold))
-                                                                .foregroundColor(.primary)
-                                                            Text("\(route.GPXFileURL)") // Or distance if available
-                                                                .font(.caption)
-                                                                .foregroundColor(.secondary)
-                                                        }
-                                                        .padding()
-                                                        .frame(width: 160, height: 80)
-                                                        .background(
-                                                            RoundedRectangle(cornerRadius: 16)
-                                                                .fill(Color(UIColor.secondarySystemBackground))
-                                                                .shadow(color: selectedRoute.id == route.id ? Color.blue.opacity(0.4) : Color.clear, radius: 8)
-                                                                .overlay(
-                                                                    RoundedRectangle(cornerRadius: 16)
-                                                                        .stroke(selectedRoute.id == route.id ? Color.blue : Color.clear, lineWidth: 2)
-                                                                )
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal)
-                                    }
+//                                    ScrollView(.horizontal, showsIndicators: false) {
+//                                        HStack(spacing: 15) {
+//                                            if let routeList = routes["Run Detroit"] {
+//                                                ForEach(routeList) { route in
+//                                                    Button(action: {
+//                                                        selectedRoute = route
+//                                                    }) {
+//                                                        VStack(alignment: .leading) {
+//                                                            Text(route.name)
+//                                                                .font(.system(size: 16, weight: .bold))
+//                                                                .foregroundColor(.primary)
+//                                                            Text("\(route.GPXFileURL)") // Or distance if available
+//                                                                .font(.caption)
+//                                                                .foregroundColor(.secondary)
+//                                                        }
+//                                                        .padding()
+//                                                        .frame(width: 160, height: 80)
+//                                                        .background(
+//                                                            RoundedRectangle(cornerRadius: 16)
+//                                                                .fill(Color(UIColor.secondarySystemBackground))
+//                                                                .shadow(color: selectedRoute.id == route.id ? Color.blue.opacity(0.4) : Color.clear, radius: 8)
+//                                                                .overlay(
+//                                                                    RoundedRectangle(cornerRadius: 16)
+//                                                                        .stroke(selectedRoute.id == route.id ? Color.blue : Color.clear, lineWidth: 2)
+//                                                                )
+//                                                        )
+//                                                    }
+//                                                }
+//                                            }
+//                                        }
+//                                        .padding(.horizontal)
+//                                    }
                                 }
                                 .padding(.bottom)
 
