@@ -18,7 +18,6 @@ class Route: Identifiable, Hashable, Codable {
     }
     
     var id: Double
-    var runners: [Runner]?
     var name: String
     var GPXFileURL: String
     var color: [Double]
