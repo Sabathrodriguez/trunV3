@@ -12,14 +12,22 @@ import CoreLocation
 
 class SharedRouteService: ObservableObject {
     @Published var nearbyRoutes: [SharedRoute] = []
+    @Published var allRoutes: [SharedRoute] = []
     @Published var isLoading: Bool = false
 
     private let db = Firestore.firestore()
 
     /// Publish a route to the shared library with its center coordinates for geo-filtering.
     func publishRoute(name: String, gpxString: String, distanceMiles: Double, coordinates: [CLLocationCoordinate2D]) {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        guard !coordinates.isEmpty else { return }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("[DEBUG] publishRoute failed: No authenticated user (currentUser is nil)")
+            return
+        }
+        guard !coordinates.isEmpty else {
+            print("[DEBUG] publishRoute failed: coordinates array is empty")
+            return
+        }
+        print("[DEBUG] publishRoute: uid=\(uid), name=\(name), coords=\(coordinates.count), distance=\(distanceMiles)")
 
         // Calculate center point (average of all coordinates)
         let centerLat = coordinates.map { $0.latitude }.reduce(0, +) / Double(coordinates.count)
@@ -96,6 +104,43 @@ class SharedRouteService: ObservableObject {
                 DispatchQueue.main.async {
                     self.nearbyRoutes = routes
                 }
+            }
+    }
+
+    /// Fetch all shared routes (no geo-filter) for database inspection.
+    func fetchAllRoutes(limit: Int = 50) {
+        isLoading = true
+
+        db.collection("sharedRoutes")
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments { [weak self] snapshot, error in
+                guard let self = self else { return }
+
+                DispatchQueue.main.async { self.isLoading = false }
+
+                if let error = error {
+                    print("Error fetching all routes: \(error)")
+                    return
+                }
+
+                guard let documents = snapshot?.documents else { return }
+
+                let routes: [SharedRoute] = documents.compactMap { doc in
+                    let data = doc.data()
+                    let timestamp = data["createdAt"] as? Timestamp
+                    return SharedRoute(
+                        id: doc.documentID,
+                        name: data["name"] as? String ?? "Unnamed Route",
+                        distanceMiles: data["distanceMiles"] as? Double ?? 0,
+                        centerLat: data["centerLat"] as? Double ?? 0,
+                        centerLon: data["centerLon"] as? Double ?? 0,
+                        runCount: data["runCount"] as? Int ?? 0,
+                        createdAt: timestamp?.dateValue() ?? Date()
+                    )
+                }
+
+                DispatchQueue.main.async { self.allRoutes = routes }
             }
     }
 

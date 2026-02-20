@@ -68,24 +68,32 @@ struct SharedRouteLibraryView: View {
 
                                 Spacer()
 
-                                Button(action: {
-                                    downloadRoute(route)
-                                }) {
-                                    if downloadingRouteID == route.id {
-                                        ProgressView()
-                                            .scaleEffect(0.7)
-                                            .frame(width: 60, height: 30)
-                                    } else {
-                                        Text("Add")
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                            .frame(width: 60, height: 30)
-                                            .background(Color.blue)
-                                            .cornerRadius(8)
+                                if isRouteAlreadyAdded(route) {
+                                    Text("Added")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.green)
+                                        .frame(width: 60, height: 30)
+                                } else {
+                                    Button(action: {
+                                        downloadRoute(route)
+                                    }) {
+                                        if downloadingRouteID == route.id {
+                                            ProgressView()
+                                                .scaleEffect(0.7)
+                                                .frame(width: 60, height: 30)
+                                        } else {
+                                            Text("Add")
+                                                .font(.caption)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.white)
+                                                .frame(width: 60, height: 30)
+                                                .background(Color.blue)
+                                                .cornerRadius(8)
+                                        }
                                     }
+                                    .disabled(downloadingRouteID != nil)
                                 }
-                                .disabled(downloadingRouteID != nil)
                             }
                             .padding(.vertical, 4)
                         }
@@ -108,6 +116,10 @@ struct SharedRouteLibraryView: View {
             userLat: location.coordinate.latitude,
             userLon: location.coordinate.longitude
         )
+    }
+
+    private func isRouteAlreadyAdded(_ sharedRoute: SharedRoute) -> Bool {
+        routes["Run Detroit"]?.contains { $0.name == sharedRoute.name } ?? false
     }
 
     private func downloadRoute(_ sharedRoute: SharedRoute) {

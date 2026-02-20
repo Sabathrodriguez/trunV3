@@ -76,6 +76,13 @@ struct ContentView: View {
     var iconHeightAndWidth: CGFloat = 75
     
     // State for file importer/exporter
+    @State private var showDBInspector = false
+    @State private var showRouteNamePrompt = false
+    @State private var routeName = ""
+    @State private var pendingGPXString = ""
+    @State private var pendingCoords: [CLLocationCoordinate2D] = []
+    @State private var pendingDistance: Double = 0
+    @State private var isUploadImporterPresented = false
     @State private var isFileImporterPresented = false
     @State private var isFileExporterPresented = false
     @State private var gpxDocument: GPXDocument?
@@ -124,6 +131,9 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         Menu {
+                            Button(action: { showDBInspector = true }) {
+                                Label("DB Inspector", systemImage: "cylinder.split.1x2")
+                            }
                             Button(role: .destructive, action: { loginManager.logout() }) {
                                 Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
                             }
@@ -137,6 +147,9 @@ struct ContentView: View {
                         }
                     }
                     Spacer()
+                }
+                .sheet(isPresented: $showDBInspector) {
+                    DatabaseInspectorView()
                 }
 
                 // LEADERBOARD OVERLAY (visible during active runs)
@@ -188,47 +201,82 @@ struct ContentView: View {
                                 alertDetails: $alertDetails
                             )
                             
-                            // ROUTE SELECTION CAROUSEL (Visible when expanded)
+                            // ROUTE SELECTION (Visible when expanded)
                             if runningMenuHeight == .large {
-                                VStack(alignment: .leading) {
-//                                    Text("Select Route")
-//                                        .font(.headline)
-//                                        .padding(.horizontal)
-                                    
-//                                    ScrollView(.horizontal, showsIndicators: false) {
-//                                        HStack(spacing: 15) {
-//                                            if let routeList = routes["Run Detroit"] {
-//                                                ForEach(routeList) { route in
-//                                                    Button(action: {
-//                                                        selectedRoute = route
-//                                                    }) {
-//                                                        VStack(alignment: .leading) {
-//                                                            Text(route.name)
-//                                                                .font(.system(size: 16, weight: .bold))
-//                                                                .foregroundColor(.primary)
-//                                                            Text("\(route.GPXFileURL)") // Or distance if available
-//                                                                .font(.caption)
-//                                                                .foregroundColor(.secondary)
-//                                                        }
-//                                                        .padding()
-//                                                        .frame(width: 160, height: 80)
-//                                                        .background(
-//                                                            RoundedRectangle(cornerRadius: 16)
-//                                                                .fill(Color(UIColor.secondarySystemBackground))
-//                                                                .shadow(color: selectedRoute.id == route.id ? Color.blue.opacity(0.4) : Color.clear, radius: 8)
-//                                                                .overlay(
-//                                                                    RoundedRectangle(cornerRadius: 16)
-//                                                                        .stroke(selectedRoute.id == route.id ? Color.blue : Color.clear, lineWidth: 2)
-//                                                                )
-//                                                        )
-//                                                    }
-//                                                }
-//                                            }
-//                                        }
-//                                        .padding(.horizontal)
-//                                    }
+                                ScrollView(.vertical, showsIndicators: true) {
+                                VStack(spacing: 16) {
+                                // MY ROUTES
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("My Routes")
+                                        .font(.headline)
+
+                                    if let routeList = routes["Run Detroit"], !routeList.isEmpty {
+                                        ScrollView(.vertical, showsIndicators: false) {
+                                            VStack(spacing: 6) {
+                                                ForEach(routeList) { route in
+                                                    HStack {
+                                                        // Color dot
+                                                        Circle()
+                                                            .fill(Color(red: route.color[0], green: route.color[1], blue: route.color[2]))
+                                                            .frame(width: 12, height: 12)
+
+                                                        Text(route.name)
+                                                            .font(.subheadline)
+                                                            .fontWeight(selectedRoute.id == route.id ? .bold : .regular)
+                                                            .lineLimit(1)
+
+                                                        Spacer()
+
+                                                        if selectedRoute.id == route.id {
+                                                            Text("Active")
+                                                                .font(.caption2)
+                                                                .fontWeight(.bold)
+                                                                .foregroundColor(.green)
+                                                                .padding(.horizontal, 8)
+                                                                .padding(.vertical, 3)
+                                                                .background(Color.green.opacity(0.15))
+                                                                .cornerRadius(6)
+                                                        }
+
+                                                        // Remove from map (only for non-built-in routes, id >= 10)
+                                                        if route.id >= 10 {
+                                                            Button(action: {
+                                                                removeRouteFromList(route)
+                                                            }) {
+                                                                Image(systemName: "xmark.circle.fill")
+                                                                    .font(.body)
+                                                                    .foregroundColor(.secondary)
+                                                            }
+                                                        }
+                                                    }
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 8)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 10)
+                                                            .fill(selectedRoute.id == route.id ? Color.blue.opacity(0.1) : Color.clear)
+                                                            .overlay(
+                                                                RoundedRectangle(cornerRadius: 10)
+                                                                    .stroke(selectedRoute.id == route.id ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
+                                                            )
+                                                    )
+                                                    .contentShape(Rectangle())
+                                                    .onTapGesture {
+                                                        selectedRoute = route
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Text("No routes added yet")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 20)
+                                    }
                                 }
-                                .padding(.bottom)
+                                .padding()
+                                .background(Color(UIColor.secondarySystemBackground))
+                                .cornerRadius(16)
 
                                 // ROUTE LEADERBOARD
                                 RouteLeaderboardView(
@@ -237,7 +285,6 @@ struct ContentView: View {
                                     liveRunners: liveRunService.liveRunners,
                                     isRunning: inRunningMode
                                 )
-                                .padding(.horizontal)
 
                                 // SHARED ROUTE LIBRARY
                                 SharedRouteLibraryView(
@@ -245,11 +292,10 @@ struct ContentView: View {
                                     routes: $routes,
                                     selectedRoute: $selectedRoute
                                 )
-                                .padding(.horizontal)
 
                                 // IMPORT / EXPORT / SHARE CONTROLS
                                 HStack(spacing: 12) {
-                                    // Import Button
+                                    // Import Button (local only)
                                     Button(action: { isFileImporterPresented = true }) {
                                         Label("Import", systemImage: "folder.badge.plus")
                                             .font(.subheadline)
@@ -261,6 +307,18 @@ struct ContentView: View {
                                             .cornerRadius(12)
                                     }
 
+                                    // Upload GPX to Firestore
+                                    Button(action: { isUploadImporterPresented = true }) {
+                                        Label("Upload", systemImage: "icloud.and.arrow.up")
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 10)
+                                            .background(Color.green)
+                                            .cornerRadius(12)
+                                    }
+
                                     // Record/Save Button
                                     Button(action: {
                                         if locationManager.isRecording {
@@ -269,15 +327,13 @@ struct ContentView: View {
                                             gpxDocument = GPXDocument(text: gpxString)
                                             isFileExporterPresented = true
 
-                                            // Share to the community
+                                            // Store pending data and prompt for name
                                             if !gpxString.isEmpty {
-                                                let coords = GPXParser().parse(gpxString: gpxString)
-                                                SharedRouteService().publishRoute(
-                                                    name: "My Route",
-                                                    gpxString: gpxString,
-                                                    distanceMiles: locationManager.convertToMiles(),
-                                                    coordinates: coords
-                                                )
+                                                pendingGPXString = gpxString
+                                                pendingCoords = GPXParser().parse(gpxString: gpxString)
+                                                pendingDistance = locationManager.convertToMiles()
+                                                routeName = ""
+                                                showRouteNamePrompt = true
                                             }
                                         } else {
                                             locationManager.startRecording()
@@ -295,6 +351,9 @@ struct ContentView: View {
                                     }
                                 }
                                 .padding(.bottom, 30)
+                            } // end VStack
+                            .padding(.horizontal)
+                            } // end ScrollView
                             }
                         }
                     }
@@ -318,6 +377,15 @@ struct ContentView: View {
                             importGPX(from: url)
                         }
                     }
+                    .fileImporter(
+                        isPresented: $isUploadImporterPresented,
+                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                        allowsMultipleSelection: false
+                    ) { result in
+                        if case .success(let urls) = result, let url = urls.first {
+                            uploadGPXToFirestore(from: url)
+                        }
+                    }
                     .fileExporter(
                         isPresented: $isFileExporterPresented,
                         document: gpxDocument,
@@ -325,6 +393,21 @@ struct ContentView: View {
                         defaultFilename: "MyRun.gpx"
                     ) { result in
                          // handle result
+                    }
+                    .alert("Name Your Route", isPresented: $showRouteNamePrompt) {
+                        TextField("Route name", text: $routeName)
+                        Button("Share") {
+                            let name = routeName.trimmingCharacters(in: .whitespaces)
+                            SharedRouteService().publishRoute(
+                                name: name.isEmpty ? "My Route" : name,
+                                gpxString: pendingGPXString,
+                                distanceMiles: pendingDistance,
+                                coordinates: pendingCoords
+                            )
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Give your route a name before sharing it.")
                     }
                 }
             }
@@ -345,6 +428,54 @@ struct ContentView: View {
         // ... existing code ...
     }
     
+    private func uploadGPXToFirestore(from url: URL) {
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+
+        do {
+            let gpxString = try String(contentsOf: url, encoding: .utf8)
+            let coords = GPXParser().parse(gpxString: gpxString)
+
+            guard !coords.isEmpty else {
+                alertTitle = "Invalid File"
+                alertDetails = "The GPX file contains no track points."
+                showAlert = true
+                return
+            }
+
+            // Calculate distance from coordinates
+            var totalMeters: Double = 0
+            for i in 1..<coords.count {
+                let prev = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
+                let curr = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
+                totalMeters += curr.distance(from: prev)
+            }
+            let distanceMiles = totalMeters * 0.000621371
+
+            pendingGPXString = gpxString
+            pendingCoords = coords
+            pendingDistance = distanceMiles
+            routeName = url.deletingPathExtension().lastPathComponent
+            showRouteNamePrompt = true
+        } catch {
+            print("Error reading GPX file: \(error)")
+            alertTitle = "Error"
+            alertDetails = "Could not read the GPX file."
+            showAlert = true
+        }
+    }
+
+    private func removeRouteFromList(_ route: Route) {
+        routes["Run Detroit"]?.removeAll { $0.id == route.id }
+
+        // If the removed route was selected, switch to the first available route
+        if selectedRoute.id == route.id {
+            if let first = routes["Run Detroit"]?.first {
+                selectedRoute = first
+            }
+        }
+    }
+
     // Logic to import the GPX file...
     private func importGPX(from url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }

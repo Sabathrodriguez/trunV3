@@ -31,8 +31,19 @@ struct RouteLeaderboardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(routeName)
-                .font(.headline)
+            HStack {
+                Image(systemName: "trophy.fill")
+                    .foregroundColor(.yellow)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Leaderboard")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                    Text(routeName)
+                        .font(.headline)
+                }
+                Spacer()
+            }
 
             // Segmented toggle
             Picker("Leaderboard", selection: $selectedTab) {

@@ -48,10 +48,10 @@ struct MainView : View {
     @StateObject public var loginManager = LoginManager()
     
     var body: some View {
-//        if loginManager.isLoggedIn {
+        if loginManager.isLoggedIn {
             ContentView(loginManager: loginManager)
-//        } else {
-//            LoginView(loginManager: loginManager)
-//        }
+        } else {
+            LoginView(loginManager: loginManager)
+        }
     }
 }
