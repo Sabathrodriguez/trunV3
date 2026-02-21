@@ -38,6 +38,8 @@ struct RunInfoView: View {
     @StateObject var locationManager = LocationManager()
     
     @FocusState var isSearchFieldFocused: Bool
+    @StateObject private var searchService = SharedRouteService()
+    @State private var downloadingSearchRouteID: String?
     
     @Environment(\.colorScheme) var colorScheme
 
@@ -76,10 +78,6 @@ struct RunInfoView: View {
             // --- STATE 1: RUN FINISHED SUMMARY ---
             if isRunDone {
                 VStack(spacing: 25) {
-                    Text("Great Run!")
-                        .font(.system(.largeTitle, design: .rounded).weight(.heavy))
-                        .foregroundColor(.primary)
-                    
                     VStack(spacing: 15) {
                         SummaryRow(icon: "map.fill", title: "Distance", value: String(format: "%.2f mi", prevRunDistance))
                         SummaryRow(icon: "stopwatch.fill", title: "Time", value: "\(prevRunMinute):\(prevRunSecond)")
@@ -121,17 +119,108 @@ struct RunInfoView: View {
                 
             // --- STATE 2: IDLE (Pre-Run) ---
             } else if !inRunningMode {
+                // Search Bar
+                if searchWasClicked {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+                        TextField("Search a city or place...", text: $searchField)
+                            .focused($isSearchFieldFocused)
+                            .onSubmit {
+                                if !searchField.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    searchService.searchRoutesByLocation(query: searchField)
+                                }
+                            }
+                        if searchService.isLoading {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
+                        Button("Cancel") {
+                            searchField = ""
+                            searchWasClicked = false
+                            searchService.searchResults = []
+                            runningMenuHeight = .medium
+                        }
+                        .foregroundColor(.blue)
+                    }
+                    .padding(10)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+
+                    // Search Results
+                    if !searchService.searchResults.isEmpty {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: 8) {
+                                ForEach(searchService.searchResults) { route in
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(route.name)
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .lineLimit(1)
+                                            HStack(spacing: 12) {
+                                                Label(String(format: "%.1f mi", route.distanceMiles), systemImage: "ruler")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                                Label("\(route.runCount) runs", systemImage: "figure.run")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                        Spacer()
+                                        if isSearchRouteAlreadyAdded(route) {
+                                            Text("Added")
+                                                .font(.caption)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.green)
+                                                .frame(width: 60, height: 30)
+                                        } else {
+                                            Button(action: { downloadSearchRoute(route) }) {
+                                                if downloadingSearchRouteID == route.id {
+                                                    ProgressView()
+                                                        .scaleEffect(0.7)
+                                                        .frame(width: 60, height: 30)
+                                                } else {
+                                                    Text("Add")
+                                                        .font(.caption)
+                                                        .fontWeight(.bold)
+                                                        .foregroundColor(.white)
+                                                        .frame(width: 60, height: 30)
+                                                        .background(Color.blue)
+                                                        .cornerRadius(8)
+                                                }
+                                            }
+                                            .disabled(downloadingSearchRouteID != nil)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 200)
+                    } else if !searchService.isLoading && !searchField.isEmpty && searchService.searchResults.isEmpty {
+                        Text("No routes found")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 8)
+                    }
+                }
+
                 HStack {
                     // Search Button
-                    Button(action: {
-                        runningMenuHeight = .large
-                        searchWasClicked = true
-                        isSearchFieldFocused = true
-                    }) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.title2)
-                            .padding()
-                            .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                    if !searchWasClicked {
+                        Button(action: {
+                            runningMenuHeight = .large
+                            searchWasClicked = true
+                            isSearchFieldFocused = true
+                        }) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.title2)
+                                .padding()
+                                .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                        }
                     }
                     
                     Spacer()
@@ -277,6 +366,17 @@ struct RunInfoView: View {
                             }
                         }
                     }
+
+                    // Location
+                    Button(action: {
+                        withAnimation { region.centerOnUser() }
+                    }) {
+                        Image(systemName: "location.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 50, height: 50)
+                            .background(Circle().fill(Color.blue.opacity(0.7)))
+                    }
                 }
                 .padding(.bottom, 20)
             }
@@ -411,6 +511,50 @@ struct RunInfoView: View {
         }
     }
     
+    private func isSearchRouteAlreadyAdded(_ sharedRoute: SharedRoute) -> Bool {
+        routes["Run Detroit"]?.contains { $0.name == sharedRoute.name } ?? false
+    }
+
+    private func downloadSearchRoute(_ sharedRoute: SharedRoute) {
+        downloadingSearchRouteID = sharedRoute.id
+
+        searchService.fetchRouteGPX(docID: sharedRoute.id) { gpxString in
+            guard let gpxString = gpxString else {
+                DispatchQueue.main.async { downloadingSearchRouteID = nil }
+                return
+            }
+
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let filename = sharedRoute.name.replacingOccurrences(of: " ", with: "_") + ".gpx"
+            let fileURL = documentsURL.appendingPathComponent(filename)
+
+            do {
+                try gpxString.write(to: fileURL, atomically: true, encoding: .utf8)
+
+                let maxId = routes["Run Detroit"]?.map { $0.id }.max() ?? 0
+                let newRoute = Route(
+                    id: maxId + 1,
+                    name: sharedRoute.name,
+                    GPXFileURL: fileURL.path,
+                    color: [0.0, 0.5, 1.0]
+                )
+
+                DispatchQueue.main.async {
+                    if routes["Run Detroit"] != nil {
+                        routes["Run Detroit"]?.append(newRoute)
+                    } else {
+                        routes["Run Detroit"] = [newRoute]
+                    }
+                    selectedRoute = newRoute
+                    downloadingSearchRouteID = nil
+                }
+            } catch {
+                print("Error saving downloaded route: \(error)")
+                DispatchQueue.main.async { downloadingSearchRouteID = nil }
+            }
+        }
+    }
+
     private func clearRunInformation() {
         prevRunMinute = 0
         prevRunSecond = ""

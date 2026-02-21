@@ -13,6 +13,7 @@ import CoreLocation
 class SharedRouteService: ObservableObject {
     @Published var nearbyRoutes: [SharedRoute] = []
     @Published var allRoutes: [SharedRoute] = []
+    @Published var searchResults: [SharedRoute] = []
     @Published var isLoading: Bool = false
 
     private let db = Firestore.firestore()
@@ -142,6 +143,78 @@ class SharedRouteService: ObservableObject {
 
                 DispatchQueue.main.async { self.allRoutes = routes }
             }
+    }
+
+    /// Geocode a place name and fetch shared routes near that location.
+    func searchRoutesByLocation(query: String) {
+        isLoading = true
+        searchResults = []
+
+        let geocoder = CLGeocoder()
+        geocoder.geocodeAddressString(query) { [weak self] placemarks, error in
+            guard let self = self else { return }
+
+            if let error = error {
+                print("Geocoding error: \(error)")
+                DispatchQueue.main.async { self.isLoading = false }
+                return
+            }
+
+            guard let coordinate = placemarks?.first?.location?.coordinate else {
+                DispatchQueue.main.async { self.isLoading = false }
+                return
+            }
+
+            let radiusMiles: Double = 25
+            let latDelta = radiusMiles * 0.0145
+            let lonDelta = radiusMiles * 0.018
+
+            self.db.collection("sharedRoutes")
+                .whereField("centerLat", isGreaterThan: coordinate.latitude - latDelta)
+                .whereField("centerLat", isLessThan: coordinate.latitude + latDelta)
+                .limit(to: 30)
+                .getDocuments { [weak self] snapshot, error in
+                    guard let self = self else { return }
+
+                    if let error = error {
+                        print("Error searching routes: \(error)")
+                        DispatchQueue.main.async { self.isLoading = false }
+                        return
+                    }
+
+                    guard let documents = snapshot?.documents else {
+                        DispatchQueue.main.async { self.isLoading = false }
+                        return
+                    }
+
+                    var routes: [SharedRoute] = []
+                    for doc in documents {
+                        let data = doc.data()
+                        let lon = data["centerLon"] as? Double ?? 0
+
+                        guard lon > coordinate.longitude - lonDelta && lon < coordinate.longitude + lonDelta else { continue }
+
+                        let timestamp = data["createdAt"] as? Timestamp
+                        let route = SharedRoute(
+                            id: doc.documentID,
+                            name: data["name"] as? String ?? "Unnamed Route",
+                            distanceMiles: data["distanceMiles"] as? Double ?? 0,
+                            centerLat: data["centerLat"] as? Double ?? 0,
+                            centerLon: lon,
+                            runCount: data["runCount"] as? Int ?? 0,
+                            createdAt: timestamp?.dateValue() ?? Date()
+                        )
+                        routes.append(route)
+                    }
+
+                    routes.sort { $0.runCount > $1.runCount }
+
+                    DispatchQueue.main.async {
+                        self.searchResults = routes
+                        self.isLoading = false
+                    }
+                }
+        }
     }
 
     /// Fetch the full GPX data for a specific shared route.
