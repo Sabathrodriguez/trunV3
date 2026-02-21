@@ -26,7 +26,10 @@ struct RouteLeaderboardView: View {
     }
 
     private var sortedLiveRunners: [Runner] {
-        liveRunners.sorted { $0.routeProgress > $1.routeProgress }
+        let routeKey = String(Int(routeID))
+        return liveRunners
+            .filter { $0.routeID == routeKey }
+            .sorted { $0.routeProgress > $1.routeProgress }
     }
 
     var body: some View {
@@ -48,7 +51,7 @@ struct RouteLeaderboardView: View {
             // Segmented toggle
             Picker("Leaderboard", selection: $selectedTab) {
                 Text("All Time").tag(LeaderboardTab.allTime)
-                Text("Running Now (\(liveRunners.count))").tag(LeaderboardTab.runningNow)
+                Text("Running Now (\(sortedLiveRunners.count))").tag(LeaderboardTab.runningNow)
             }
             .pickerStyle(.segmented)
 

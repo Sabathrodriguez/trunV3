@@ -12,7 +12,7 @@ struct SharedRouteLibraryView: View {
     @StateObject private var service = SharedRouteService()
     @ObservedObject var userLocation: UserLocation
     @Binding var routes: [String: [Route]]
-    @Binding var selectedRoute: Route
+    @Binding var selectedRoute: Route?
 
     @State private var showShareAlert = false
     @State private var downloadingRouteID: String?

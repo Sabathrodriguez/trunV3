@@ -23,7 +23,7 @@ struct RunView: View {
 
     @Binding var routes: [String: [Route]]
 
-    @Binding var selectedRoute: Route
+    @Binding var selectedRoute: Route?
 
     @Binding var showAlert: Bool
     @Binding var alertTitle: String

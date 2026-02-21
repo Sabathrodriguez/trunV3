@@ -30,7 +30,7 @@ struct RunInfoView: View {
     @ObservedObject var liveRunService: LiveRunService
 
     @Binding var routes: [String: [Route]]
-    @Binding var selectedRoute: Route
+    @Binding var selectedRoute: Route?
     
     @State var isPaused: Bool = false
     @State var searchField: String = ""
@@ -44,6 +44,9 @@ struct RunInfoView: View {
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     @State private var currentTimer = 0.0
     @State private var isTimerPaused: Bool = false
+    @State private var runStartDate: Date = Date()
+    @State private var pausedDuration: Double = 0.0
+    @State private var pauseStartDate: Date? = nil
     
     let generator = UISelectionFeedbackGenerator()
     private let cancelTimer = 1.5
@@ -239,6 +242,10 @@ struct RunInfoView: View {
                         
                         // RESUME BUTTON
                         Button(action: {
+                            if let pauseStart = pauseStartDate {
+                                pausedDuration += Date().timeIntervalSince(pauseStart)
+                            }
+                            pauseStartDate = nil
                             isPaused = false
                             locationManager.startTracking()
                             isTimerPaused = false
@@ -256,6 +263,7 @@ struct RunInfoView: View {
                             isPaused = true
                             locationManager.pauseTracking()
                             isTimerPaused = true
+                            pauseStartDate = Date()
                         }) {
                             ZStack {
                                 Circle()
@@ -276,7 +284,7 @@ struct RunInfoView: View {
         .padding()
         .onReceive(timer) { _ in
             if !isTimerPaused {
-                currentTimer += 0.1
+                currentTimer = Date().timeIntervalSince(runStartDate) - pausedDuration
                 let tick = Int(currentTimer * 10)
                 // Update pace every 3 seconds
                 if tick % 30 == 0 {
@@ -325,10 +333,15 @@ struct RunInfoView: View {
         currentTimer = 0
         isRunDone = false
         runData.startTime = Date()
+        runStartDate = runData.startTime
+        pausedDuration = 0.0
+        pauseStartDate = nil
 
-        // Start multiplayer session
-        let routeCoords = GPXToRoute().convertGPXToRoute(filePath: selectedRoute.GPXFileURL) ?? []
-        liveRunService.startSession(routeID: selectedRoute.id, routeCoordinates: routeCoords)
+        // Start multiplayer session only if a route is selected
+        if let route = selectedRoute {
+            let routeCoords = GPXToRoute().convertGPXToRoute(filePath: route.GPXFileURL) ?? []
+            liveRunService.startSession(routeID: route.id, routeCoordinates: routeCoords)
+        }
     }
     
     func finishRun(minute: Int, seconds: String) {
@@ -374,14 +387,16 @@ struct RunInfoView: View {
             if success { print("Run saved to HealthKit!") }
         }
 
-        // Save to route leaderboard in Firestore
-        RouteLeaderboardService().saveCompletedRun(
-            routeID: selectedRoute.id,
-            time: runData.time,
-            distance: prevRunDistance,
-            pace: prevRunMinPerMile,
-            routeProgress: 1.0
-        )
+        // Save to route leaderboard in Firestore (only if a route was selected)
+        if let route = selectedRoute {
+            RouteLeaderboardService().saveCompletedRun(
+                routeID: route.id,
+                time: runData.time,
+                distance: prevRunDistance,
+                pace: prevRunMinPerMile,
+                routeProgress: 1.0
+            )
+        }
     }
     
     private func checkCameraAvailability() {

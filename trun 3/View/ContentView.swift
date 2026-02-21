@@ -59,7 +59,7 @@ struct ContentView: View {
         Route(id: 9, name: "8 mile new", GPXFileURL: "8_miles_new", color: [1, 0.647, 0])
     ]]
     
-    @State var selectedRoute: Route = Route(id: 0, name: "", GPXFileURL: "3_miles_red", color: [1, 0, 0])
+    @State var selectedRoute: Route? = nil
     
     @State var selectedRun: Pace? = .CurrentMile
     
@@ -103,9 +103,10 @@ struct ContentView: View {
                 Map(position: $viewModel.regionView) {
                     UserAnnotation()
                     
-                    if let coords = routeConverter.convertGPXToRoute(filePath: selectedRoute.GPXFileURL) {
+                    if let route = selectedRoute,
+                       let coords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL) {
                         MapPolyline(coordinates: coords)
-                            .stroke(Color(red: selectedRoute.color[0], green: selectedRoute.color[1], blue: selectedRoute.color[2]), lineWidth: 4) // Thicker line
+                            .stroke(Color(red: route.color[0], green: route.color[1], blue: route.color[2]), lineWidth: 4)
                     }
                     
                     ForEach(liveRunService.liveRunners) { runner in
@@ -213,6 +214,45 @@ struct ContentView: View {
                                     if let routeList = routes["Run Detroit"], !routeList.isEmpty {
                                         ScrollView(.vertical, showsIndicators: false) {
                                             VStack(spacing: 6) {
+                                                // NO ROUTE option
+                                                HStack {
+                                                    Circle()
+                                                        .fill(Color.gray)
+                                                        .frame(width: 12, height: 12)
+
+                                                    Text("No Route")
+                                                        .font(.subheadline)
+                                                        .fontWeight(selectedRoute == nil ? .bold : .regular)
+                                                        .lineLimit(1)
+
+                                                    Spacer()
+
+                                                    if selectedRoute == nil {
+                                                        Text("Active")
+                                                            .font(.caption2)
+                                                            .fontWeight(.bold)
+                                                            .foregroundColor(.green)
+                                                            .padding(.horizontal, 8)
+                                                            .padding(.vertical, 3)
+                                                            .background(Color.green.opacity(0.15))
+                                                            .cornerRadius(6)
+                                                    }
+                                                }
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .fill(selectedRoute == nil ? Color.blue.opacity(0.1) : Color.clear)
+                                                        .overlay(
+                                                            RoundedRectangle(cornerRadius: 10)
+                                                                .stroke(selectedRoute == nil ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
+                                                        )
+                                                )
+                                                .contentShape(Rectangle())
+                                                .onTapGesture {
+                                                    selectedRoute = nil
+                                                }
+
                                                 ForEach(routeList) { route in
                                                     HStack {
                                                         // Color dot
@@ -222,12 +262,12 @@ struct ContentView: View {
 
                                                         Text(route.name)
                                                             .font(.subheadline)
-                                                            .fontWeight(selectedRoute.id == route.id ? .bold : .regular)
+                                                            .fontWeight(selectedRoute?.id == route.id ? .bold : .regular)
                                                             .lineLimit(1)
 
                                                         Spacer()
 
-                                                        if selectedRoute.id == route.id {
+                                                        if selectedRoute?.id == route.id {
                                                             Text("Active")
                                                                 .font(.caption2)
                                                                 .fontWeight(.bold)
@@ -253,10 +293,10 @@ struct ContentView: View {
                                                     .padding(.vertical, 8)
                                                     .background(
                                                         RoundedRectangle(cornerRadius: 10)
-                                                            .fill(selectedRoute.id == route.id ? Color.blue.opacity(0.1) : Color.clear)
+                                                            .fill(selectedRoute?.id == route.id ? Color.blue.opacity(0.1) : Color.clear)
                                                             .overlay(
                                                                 RoundedRectangle(cornerRadius: 10)
-                                                                    .stroke(selectedRoute.id == route.id ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
+                                                                    .stroke(selectedRoute?.id == route.id ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
                                                             )
                                                     )
                                                     .contentShape(Rectangle())
@@ -279,12 +319,32 @@ struct ContentView: View {
                                 .cornerRadius(16)
 
                                 // ROUTE LEADERBOARD
-                                RouteLeaderboardView(
-                                    routeID: selectedRoute.id,
-                                    routeName: selectedRoute.name,
-                                    liveRunners: liveRunService.liveRunners,
-                                    isRunning: inRunningMode
-                                )
+                                if let route = selectedRoute {
+                                    RouteLeaderboardView(
+                                        routeID: route.id,
+                                        routeName: route.name,
+                                        liveRunners: liveRunService.liveRunners,
+                                        isRunning: inRunningMode
+                                    )
+                                } else {
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "trophy")
+                                            .font(.largeTitle)
+                                            .foregroundColor(.secondary)
+                                        Text("Select a Route")
+                                            .font(.headline)
+                                            .foregroundColor(.secondary)
+                                        Text("Choose a route to see its leaderboard")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .multilineTextAlignment(.center)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 30)
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemBackground))
+                                    .cornerRadius(16)
+                                }
 
                                 // SHARED ROUTE LIBRARY
                                 SharedRouteLibraryView(
@@ -468,11 +528,9 @@ struct ContentView: View {
     private func removeRouteFromList(_ route: Route) {
         routes["Run Detroit"]?.removeAll { $0.id == route.id }
 
-        // If the removed route was selected, switch to the first available route
-        if selectedRoute.id == route.id {
-            if let first = routes["Run Detroit"]?.first {
-                selectedRoute = first
-            }
+        // If the removed route was selected, reset to no route
+        if selectedRoute?.id == route.id {
+            selectedRoute = nil
         }
     }
 
