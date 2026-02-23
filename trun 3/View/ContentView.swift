@@ -46,7 +46,9 @@ struct ContentView: View {
 
     let db = Firestore.firestore()
     
-    @State var routes: [String: [Route]] = ["Run Detroit": [
+    @State var routes: [String: [Route]] = ContentView.loadInitialRoutes()
+
+    private static let defaultRoutes: [Route] = [
         Route(id: 0, name: "3 mile red", GPXFileURL: "3_miles_red", color: [1, 0, 0]),
         Route(id: 1, name: "6 mile red", GPXFileURL: "6_miles_red", color: [1, 0, 0]),
         Route(id: 2, name: "10 mile red", GPXFileURL: "10_miles_red", color: [1, 0, 0]),
@@ -57,7 +59,21 @@ struct ContentView: View {
         Route(id: 7, name: "6 mile green", GPXFileURL: "6_miles_green", color: [0, 1, 0]),
         Route(id: 8, name: "10 mile green", GPXFileURL: "10_miles_green", color: [0, 1, 0]),
         Route(id: 9, name: "8 mile new", GPXFileURL: "8_miles_new", color: [1, 0.647, 0])
-    ]]
+    ]
+
+    private static func loadInitialRoutes() -> [String: [Route]] {
+        if var saved = RouteStorageService.loadRoutes() {
+            let existingIds = Set(saved["Run Detroit"]?.map { $0.id } ?? [])
+            let missingDefaults = defaultRoutes.filter { !existingIds.contains($0.id) }
+            if saved["Run Detroit"] != nil {
+                saved["Run Detroit"]?.insert(contentsOf: missingDefaults, at: 0)
+            } else {
+                saved["Run Detroit"] = defaultRoutes
+            }
+            return saved
+        }
+        return ["Run Detroit": defaultRoutes]
+    }
     
     @State var selectedRoute: Route? = nil
     
@@ -105,9 +121,42 @@ struct ContentView: View {
                     UserAnnotation()
                     
                     if let route = selectedRoute,
-                       let coords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL) {
+                       let coords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL),
+                       !coords.isEmpty {
+                        let routeColor = Color(red: route.color[0], green: route.color[1], blue: route.color[2])
+
                         MapPolyline(coordinates: coords)
-                            .stroke(Color(red: route.color[0], green: route.color[1], blue: route.color[2]), lineWidth: 4)
+                            .stroke(routeColor, lineWidth: 4)
+
+                        // Start annotation
+                        Annotation("Start", coordinate: coords.first!) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 16, height: 16)
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 2)
+                                    .frame(width: 16, height: 16)
+                            }
+                        }
+
+                        // End annotation
+                        Annotation("Finish", coordinate: coords.last!) {
+                            Image(systemName: "flag.fill")
+                                .foregroundColor(.red)
+                                .font(.system(size: 20))
+                                .shadow(radius: 2)
+                        }
+
+                        // Directional arrows
+                        ForEach(RouteAnnotationHelpers.generateArrows(from: coords)) { arrow in
+                            Annotation("", coordinate: arrow.coordinate, anchor: .center) {
+                                Image(systemName: "arrowtriangle.forward.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(routeColor)
+                                    .rotationEffect(.degrees(arrow.bearing - 90))
+                            }
+                        }
                     }
                     
                     ForEach(liveRunService.liveRunners.filter { $0.name != "You" }) { runner in
@@ -136,6 +185,9 @@ struct ContentView: View {
                 }
                 .onChange(of: selectedRoute) { _ in
                     viewModel.centerOnUser()
+                }
+                .onChange(of: routes) { _ in
+                    RouteStorageService.saveRoutes(routes)
                 }
                 
                 // PROFILE MENU OVERLAY

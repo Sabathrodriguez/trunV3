@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UniformTypeIdentifiers
 
 @available(iOS 26.0, *)
 struct RouteGeneratorView: View {
@@ -22,6 +23,9 @@ struct RouteGeneratorView: View {
     )? = nil
     @State private var showNamePrompt: Bool = false
     @State private var selectedActivityType: ActivityType = .running
+    @State private var showFileExporter: Bool = false
+    @State private var gpxDocumentToExport: GPXDocument?
+    @State private var exportFileName: String = "route"
 
     var body: some View {
         NavigationView {
@@ -107,6 +111,15 @@ struct RouteGeneratorView: View {
                         Map {
                             MapPolyline(coordinates: coords)
                                 .stroke(activityColor, lineWidth: 3)
+
+                            ForEach(RouteAnnotationHelpers.generateArrows(from: coords)) { arrow in
+                                Annotation("", coordinate: arrow.coordinate, anchor: .center) {
+                                    Image(systemName: "arrowtriangle.forward.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundColor(activityColor)
+                                        .rotationEffect(.degrees(arrow.bearing - 90))
+                                }
+                            }
                         }
                         .frame(height: 200)
                         .cornerRadius(12)
@@ -161,6 +174,20 @@ struct RouteGeneratorView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Give your generated route a name.")
+            }
+            .fileExporter(
+                isPresented: $showFileExporter,
+                document: gpxDocumentToExport,
+                contentType: UTType(filenameExtension: "gpx") ?? .xml,
+                defaultFilename: exportFileName
+            ) { result in
+                switch result {
+                case .success:
+                    isPresented = false
+                case .failure(let error):
+                    errorMessage = "Export failed: \(error.localizedDescription)"
+                    showError = true
+                }
             }
         }
     }
@@ -220,34 +247,10 @@ struct RouteGeneratorView: View {
 
         let sanitized = GPXValidator.sanitizeRouteName(routeName)
         let name = sanitized.isEmpty ? "AI Route" : sanitized
-
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let filename = name.replacingOccurrences(of: " ", with: "_") + ".gpx"
-        let fileURL = documentsURL.appendingPathComponent(filename)
 
-        do {
-            try result.gpxString.write(to: fileURL, atomically: true, encoding: .utf8)
-
-            let maxId = routes["Run Detroit"]?.map { $0.id }.max() ?? 0
-            let newRoute = Route(
-                id: maxId + 1,
-                name: name,
-                GPXFileURL: fileURL.path,
-                color: selectedActivityType == .cycling ? [0.2, 0.5, 1.0] : selectedActivityType == .running ? [0.6, 0.2, 1.0] : [0.4, 0.7, 0.3]
-            )
-
-            if routes["Run Detroit"] != nil {
-                routes["Run Detroit"]?.append(newRoute)
-            } else {
-                routes["Run Detroit"] = [newRoute]
-            }
-
-            selectedRoute = newRoute
-            isPresented = false
-
-        } catch {
-            errorMessage = "Could not save route: \(error.localizedDescription)"
-            showError = true
-        }
+        gpxDocumentToExport = GPXDocument(text: result.gpxString)
+        exportFileName = filename
+        showFileExporter = true
     }
 }
