@@ -28,6 +28,21 @@ class SharedRouteService: ObservableObject {
             print("[DEBUG] publishRoute failed: coordinates array is empty")
             return
         }
+
+        // Server-side validation before writing to Firestore
+        guard gpxString.utf8.count <= GPXValidator.maxFileSizeBytes else {
+            print("[DEBUG] publishRoute failed: GPX data too large (\(gpxString.utf8.count) bytes)")
+            return
+        }
+        guard coordinates.count <= GPXValidator.maxCoordinateCount else {
+            print("[DEBUG] publishRoute failed: too many coordinates (\(coordinates.count))")
+            return
+        }
+        guard distanceMiles <= GPXValidator.maxDistanceMiles else {
+            print("[DEBUG] publishRoute failed: route too long (\(distanceMiles) miles)")
+            return
+        }
+
         print("[DEBUG] publishRoute: uid=\(uid), name=\(name), coords=\(coordinates.count), distance=\(distanceMiles)")
 
         // Calculate center point (average of all coordinates)

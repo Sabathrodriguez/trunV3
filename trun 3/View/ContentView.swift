@@ -457,9 +457,10 @@ struct ContentView: View {
                     .alert("Name Your Route", isPresented: $showRouteNamePrompt) {
                         TextField("Route name", text: $routeName)
                         Button("Share") {
-                            let name = routeName.trimmingCharacters(in: .whitespaces)
+                            let sanitized = GPXValidator.sanitizeRouteName(routeName)
+                            let name = sanitized.isEmpty ? "My Route" : sanitized
                             SharedRouteService().publishRoute(
-                                name: name.isEmpty ? "My Route" : name,
+                                name: name,
                                 gpxString: pendingGPXString,
                                 distanceMiles: pendingDistance,
                                 coordinates: pendingCoords
@@ -493,30 +494,30 @@ struct ContentView: View {
         defer { url.stopAccessingSecurityScopedResource() }
 
         do {
+            // Validate file type and size
+            try GPXValidator.validateFile(at: url)
+
             let gpxString = try String(contentsOf: url, encoding: .utf8)
+
+            // Validate content for structure and suspicious patterns
+            try GPXValidator.validateContent(gpxString)
+
             let coords = GPXParser().parse(gpxString: gpxString)
 
-            guard !coords.isEmpty else {
-                alertTitle = "Invalid File"
-                alertDetails = "The GPX file contains no track points."
-                showAlert = true
-                return
-            }
+            // Validate coordinates (range, count, and distance)
+            try GPXValidator.validateCoordinates(coords)
 
-            // Calculate distance from coordinates
-            var totalMeters: Double = 0
-            for i in 1..<coords.count {
-                let prev = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
-                let curr = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
-                totalMeters += curr.distance(from: prev)
-            }
-            let distanceMiles = totalMeters * 0.000621371
+            let distanceMiles = GPXValidator.calculateDistanceMiles(coords)
 
             pendingGPXString = gpxString
             pendingCoords = coords
             pendingDistance = distanceMiles
             routeName = url.deletingPathExtension().lastPathComponent
             showRouteNamePrompt = true
+        } catch let error as GPXValidator.ValidationError {
+            alertTitle = "Invalid GPX File"
+            alertDetails = error.errorDescription ?? "The file could not be validated."
+            showAlert = true
         } catch {
             print("Error reading GPX file: \(error)")
             alertTitle = "Error"
@@ -538,39 +539,54 @@ struct ContentView: View {
     private func importGPX(from url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
-        
+
         do {
+            // Validate file type and size
+            try GPXValidator.validateFile(at: url)
+
+            // Validate content
+            let gpxString = try String(contentsOf: url, encoding: .utf8)
+            try GPXValidator.validateContent(gpxString)
+
+            // Parse and validate coordinates
+            let coords = GPXParser().parse(gpxString: gpxString)
+            try GPXValidator.validateCoordinates(coords)
+
             let filename = url.lastPathComponent
             let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let destinationURL = documentsURL.appendingPathComponent(filename)
-            
+
             // Remove existing file if necessary
             if FileManager.default.fileExists(atPath: destinationURL.path) {
                 try FileManager.default.removeItem(at: destinationURL)
             }
-            
+
             try FileManager.default.copyItem(at: url, to: destinationURL)
-            
+
             // Generate new ID based on max existing ID
             let maxId = routes["Run Detroit"]?.map { $0.id }.max() ?? 0
             let newId = maxId + 1
             let name = filename.replacingOccurrences(of: ".gpx", with: "")
-            
+
             let newRoute = Route(
                 id: newId,
                 name: name,
                 GPXFileURL: destinationURL.path,
                 color: [0.0, 0.5, 1.0]
             )
-            
+
             if routes["Run Detroit"] != nil {
                 routes["Run Detroit"]?.append(newRoute)
             } else {
                 routes["Run Detroit"] = [newRoute]
             }
-            
+
             selectedRoute = newRoute
-            
+
+        } catch let error as GPXValidator.ValidationError {
+            alertTitle = "Invalid GPX File"
+            alertDetails = error.errorDescription ?? "The file could not be validated."
+            showAlert = true
         } catch {
             print("Error importing GPX: \(error)")
             alertTitle = "Error"
