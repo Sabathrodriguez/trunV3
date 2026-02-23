@@ -109,7 +109,7 @@ struct ContentView: View {
                             .stroke(Color(red: route.color[0], green: route.color[1], blue: route.color[2]), lineWidth: 4)
                     }
                     
-                    ForEach(liveRunService.liveRunners) { runner in
+                    ForEach(liveRunService.liveRunners.filter { $0.name != "You" }) { runner in
                         Annotation(runner.name, coordinate: runner.location) {
                             RunnerAnnotationView(runner: runner)
                         }

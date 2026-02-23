@@ -9,7 +9,12 @@ import SwiftUI
 
 struct Runner: Identifiable, Hashable {
     static func == (lhs: Runner, rhs: Runner) -> Bool {
-        return lhs.id == rhs.id
+        return lhs.id == rhs.id &&
+               lhs.location.latitude == rhs.location.latitude &&
+               lhs.location.longitude == rhs.location.longitude &&
+               lhs.routeProgress == rhs.routeProgress &&
+               lhs.pace == rhs.pace &&
+               lhs.distanceMiles == rhs.distanceMiles
     }
 
     func hash(into hasher: inout Hasher) {

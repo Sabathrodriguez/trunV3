@@ -30,13 +30,8 @@ struct LoginView: View {
     var body: some View {
         ZStack {
             // BACKGROUND IMAGE
-            // Assuming "freedom" exists in Assets.xcassets
-            Image("freedom")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .edgesIgnoringSafeArea(.all)
-                .overlay(Color.black.opacity(0.4)) // Dark overlay for text readability
-            
+            Color.black.edgesIgnoringSafeArea(.all)
+
             VStack(spacing: 20) {
                 Spacer()
                 

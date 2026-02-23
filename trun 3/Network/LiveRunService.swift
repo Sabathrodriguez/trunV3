@@ -26,8 +26,6 @@ class LiveRunService: ObservableObject {
     private var runnersDict: [String: Runner] = [:]
     // Track join order for anonymous labeling
     private var joinOrder: [String] = []
-    // Track previous progress values for pace derivation
-    private var previousProgress: [String: (progress: Double, time: Date)] = [:]
 
     // Route geometry for progress calculation
     private var routeCoordinates: [CLLocationCoordinate2D] = []
@@ -36,6 +34,7 @@ class LiveRunService: ObservableObject {
 
     private var currentRouteID: String?
     private var currentUID: String? { Auth.auth().currentUser?.uid }
+    private var isSessionActive = false
 
     init() {
         self.dbRef = Database.database().reference()
@@ -54,8 +53,8 @@ class LiveRunService: ObservableObject {
         // Clear previous state
         runnersDict.removeAll()
         joinOrder.removeAll()
-        previousProgress.removeAll()
         liveRunners = []
+        isSessionActive = true
 
         // Set up references
         userRef = dbRef.child("activeRuns").child(routeKey).child(uid)
@@ -86,6 +85,7 @@ class LiveRunService: ObservableObject {
             "la": location.coordinate.latitude,
             "lo": location.coordinate.longitude,
             "p": progress,
+            "pa": pace,
             "t": ServerValue.timestamp()
         ]
         userRef?.updateChildValues(data)
@@ -110,6 +110,9 @@ class LiveRunService: ObservableObject {
     // MARK: - Stop Session
 
     func stopSession() {
+        // Deactivate session first to prevent callbacks from re-populating state
+        isSessionActive = false
+
         // Remove listeners
         if let ref = routeRef {
             if let h = addedHandle { ref.removeObserver(withHandle: h) }
@@ -127,7 +130,6 @@ class LiveRunService: ObservableObject {
         // Clear state
         runnersDict.removeAll()
         joinOrder.removeAll()
-        previousProgress.removeAll()
         routeCoordinates.removeAll()
         routeCumulativeDistances.removeAll()
         routeTotalDistance = 0
@@ -154,25 +156,20 @@ class LiveRunService: ObservableObject {
         }
 
         removedHandle = ref.observe(.childRemoved) { [weak self] snapshot in
-            guard let self = self else { return }
+            guard let self = self, self.isSessionActive else { return }
             let uid = snapshot.key
             self.runnersDict.removeValue(forKey: uid)
             self.joinOrder.removeAll { $0 == uid }
-            self.previousProgress.removeValue(forKey: uid)
             self.publishRunners()
         }
     }
 
     private func handleRunnerUpdate(snapshot: DataSnapshot) {
+        guard isSessionActive else { return }
+
         let uid = snapshot.key
         guard let data = snapshot.value as? [String: Any],
               let routeID = currentRouteID else { return }
-
-        // Filter stale entries (>30 seconds old)
-        if let timestamp = data["t"] as? Double {
-            let age = Date().timeIntervalSince1970 - (timestamp / 1000.0)
-            if age > 30 { return }
-        }
 
         // Track join order for anonymous labeling
         if !joinOrder.contains(uid) {
@@ -183,29 +180,12 @@ class LiveRunService: ObservableObject {
         // Skip the current user — we manage their entry locally in publishLocation
         if uid == currentUID { return }
 
-        // Derive pace from route progress delta
         let currentProgress = data["p"] as? Double ?? 0
-        var derivedPace = "--:--"
-        if let prev = previousProgress[uid], routeTotalDistance > 0 {
-            let timeDelta = Date().timeIntervalSince(prev.time)
-            let progressDelta = currentProgress - prev.progress
-            if timeDelta > 0 && progressDelta > 0 {
-                let distanceDeltaMiles = progressDelta * routeTotalDistance * 0.000621371
-                let minutesDelta = timeDelta / 60.0
-                let minutesPerMile = minutesDelta / distanceDeltaMiles
-                let wholeMinutes = Int(minutesPerMile)
-                let seconds = Int((minutesPerMile - Double(wholeMinutes)) * 60)
-                if wholeMinutes < 60 {
-                    derivedPace = String(format: "%d:%02d", wholeMinutes, seconds)
-                }
-            }
-        }
-        previousProgress[uid] = (progress: currentProgress, time: Date())
-
+        let publishedPace = data["pa"] as? String ?? "--:--"
         let distanceMiles = currentProgress * routeTotalDistance * 0.000621371
 
         var runner = Runner(id: uid, data: data, routeID: routeID, runnerIndex: index)
-        runner.pace = derivedPace
+        runner.pace = publishedPace
         runner.distanceMiles = distanceMiles
 
         runnersDict[uid] = runner
@@ -213,6 +193,7 @@ class LiveRunService: ObservableObject {
     }
 
     private func publishRunners() {
+        guard isSessionActive else { return }
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.5)) {
                 self.liveRunners = Array(self.runnersDict.values)

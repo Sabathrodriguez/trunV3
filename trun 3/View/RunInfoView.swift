@@ -291,9 +291,8 @@ struct RunInfoView: View {
                 }
                 .padding(.top)
 
-                Spacer()
-                
-                // CONTROLS (Pause/Stop/Camera)
+                // CONTROLS (Pause/Stop/Camera) - hidden when compact (250pt)
+                if runningMenuHeight != .height(100) {
                 HStack(spacing: 40) {
                     // Camera
                     Button(action: { isImagePickerPresented = true }) {
@@ -379,6 +378,7 @@ struct RunInfoView: View {
                     }
                 }
                 .padding(.bottom, 20)
+                }
             }
         }
         .padding()
