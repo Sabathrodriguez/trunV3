@@ -86,6 +86,7 @@ struct ContentView: View {
     @State private var isFileImporterPresented = false
     @State private var isFileExporterPresented = false
     @State private var gpxDocument: GPXDocument?
+    @State private var showRouteGenerator = false
     
     // We can use the LocationManager from the view model if it's accessible,
     // but the provided UserLocation class seems separate. 
@@ -119,6 +120,16 @@ struct ContentView: View {
                     MapCompass()
                 }
                 .edgesIgnoringSafeArea(.all)
+                .sheet(isPresented: $showRouteGenerator) {
+                    if #available(iOS 26.0, *) {
+                        RouteGeneratorView(
+                            routes: $routes,
+                            selectedRoute: $selectedRoute,
+                            isPresented: $showRouteGenerator,
+                            userLocation: viewModel.locationManager?.location?.coordinate
+                        )
+                    }
+                }
                 .onAppear {
                     viewModel.checkIfLocationServicesEnabled()
                     requestHealthKitAccess()
@@ -426,6 +437,20 @@ struct ContentView: View {
                                             .padding(.vertical, 10)
                                             .background(locationManager.isRecording ? Color.red : Color.orange)
                                             .cornerRadius(12)
+                                    }
+
+                                    // AI Generate Button
+                                    if #available(iOS 26, *) {
+                                        Button(action: { showRouteGenerator = true }) {
+                                            Label("Generate", systemImage: "wand.and.stars")
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 10)
+                                                .background(Color.purple)
+                                                .cornerRadius(12)
+                                        }
                                     }
                                 }
                                 .padding(.bottom, 30)
