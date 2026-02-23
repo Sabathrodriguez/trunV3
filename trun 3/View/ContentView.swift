@@ -366,6 +366,15 @@ struct ContentView: View {
                                             .background(Color.blue)
                                             .cornerRadius(12)
                                     }
+                                    .fileImporter(
+                                        isPresented: $isFileImporterPresented,
+                                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                                        allowsMultipleSelection: false
+                                    ) { result in
+                                        if case .success(let urls) = result, let url = urls.first {
+                                            importGPX(from: url)
+                                        }
+                                    }
 
                                     // Upload GPX to Firestore
                                     Button(action: { isUploadImporterPresented = true }) {
@@ -377,6 +386,15 @@ struct ContentView: View {
                                             .padding(.vertical, 10)
                                             .background(Color.green)
                                             .cornerRadius(12)
+                                    }
+                                    .fileImporter(
+                                        isPresented: $isUploadImporterPresented,
+                                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                                        allowsMultipleSelection: false
+                                    ) { result in
+                                        if case .success(let urls) = result, let url = urls.first {
+                                            uploadGPXToFirestore(from: url)
+                                        }
                                     }
 
                                     // Record/Save Button
@@ -425,25 +443,6 @@ struct ContentView: View {
                     .onChange(of: runningMenuHeight) { newHeight in
                         if (newHeight == .height(100) || newHeight == .height(250)) {
                             searchWasClicked = false
-                        }
-                    }
-                    // ... [Keep file importer/exporter modifiers] ...
-                    .fileImporter(
-                        isPresented: $isFileImporterPresented,
-                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
-                        allowsMultipleSelection: false
-                    ) { result in
-                        if case .success(let urls) = result, let url = urls.first {
-                            importGPX(from: url)
-                        }
-                    }
-                    .fileImporter(
-                        isPresented: $isUploadImporterPresented,
-                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
-                        allowsMultipleSelection: false
-                    ) { result in
-                        if case .success(let urls) = result, let url = urls.first {
-                            uploadGPXToFirestore(from: url)
                         }
                     }
                     .fileExporter(
