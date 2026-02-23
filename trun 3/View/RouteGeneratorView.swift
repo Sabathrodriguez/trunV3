@@ -21,16 +21,52 @@ struct RouteGeneratorView: View {
         distanceMiles: Double
     )? = nil
     @State private var showNamePrompt: Bool = false
+    @State private var selectedActivityType: ActivityType = .running
 
     var body: some View {
         NavigationView {
+            ScrollView {
             VStack(spacing: 20) {
+                HStack {
+                    Text("Activity")
+                        .font(.headline)
+                    Spacer()
+                    Menu {
+                        Button(action: { selectedActivityType = .running }) {
+                            Label("Running", systemImage: "figure.run")
+                        }
+                        Button(action: { selectedActivityType = .walking }) {
+                            Label("Walking", systemImage: "figure.walk")
+                        }
+                        Button(action: { selectedActivityType = .cycling }) {
+                            Label("Cycling", systemImage: "bicycle")
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: activityIcon)
+                            Text(activityLabel)
+                                .fontWeight(.medium)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(activityColor.opacity(0.15))
+                        .foregroundColor(activityColor)
+                        .cornerRadius(8)
+                    }
+                    .disabled(generationService.isGenerating)
+                }
+                .padding(.horizontal)
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Describe your route")
                         .font(.headline)
 
                     TextField(
-                        "e.g., \"7 mile loop toward the city\"",
+                        selectedActivityType == .cycling
+                            ? "e.g., \"10 mile bike ride along the river\""
+                            : "e.g., \"7 mile \(selectedActivityType == .running ? "run" : "walk") toward the city\"",
                         text: $userInput,
                         axis: .vertical
                     )
@@ -52,7 +88,7 @@ struct RouteGeneratorView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(userInput.isEmpty || generationService.isGenerating ? Color.gray : Color.purple)
+                    .background(userInput.isEmpty || generationService.isGenerating ? Color.gray : activityColor)
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
@@ -70,7 +106,7 @@ struct RouteGeneratorView: View {
 
                         Map {
                             MapPolyline(coordinates: coords)
-                                .stroke(.purple, lineWidth: 3)
+                                .stroke(activityColor, lineWidth: 3)
                         }
                         .frame(height: 200)
                         .cornerRadius(12)
@@ -100,9 +136,13 @@ struct RouteGeneratorView: View {
                     .padding(.horizontal)
                 }
 
-                Spacer()
             }
             .padding(.top)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
             .navigationTitle("AI Route Generator")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -125,6 +165,30 @@ struct RouteGeneratorView: View {
         }
     }
 
+    private var activityColor: Color {
+        switch selectedActivityType {
+        case .running: return .purple
+        case .walking: return .green
+        case .cycling: return .blue
+        }
+    }
+
+    private var activityIcon: String {
+        switch selectedActivityType {
+        case .running: return "figure.run"
+        case .walking: return "figure.walk"
+        case .cycling: return "bicycle"
+        }
+    }
+
+    private var activityLabel: String {
+        switch selectedActivityType {
+        case .running: return "Running"
+        case .walking: return "Walking"
+        case .cycling: return "Cycling"
+        }
+    }
+
     private func generateRoute() {
         guard let location = userLocation else {
             errorMessage = "Unable to determine your location."
@@ -136,7 +200,8 @@ struct RouteGeneratorView: View {
             do {
                 let result = try await generationService.generateRoute(
                     userInput: userInput,
-                    userLocation: location
+                    userLocation: location,
+                    activityType: selectedActivityType
                 )
                 await MainActor.run {
                     generatedResult = result
@@ -168,7 +233,7 @@ struct RouteGeneratorView: View {
                 id: maxId + 1,
                 name: name,
                 GPXFileURL: fileURL.path,
-                color: [0.6, 0.2, 1.0]
+                color: selectedActivityType == .cycling ? [0.2, 0.5, 1.0] : selectedActivityType == .running ? [0.6, 0.2, 1.0] : [0.4, 0.7, 0.3]
             )
 
             if routes["Run Detroit"] != nil {

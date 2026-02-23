@@ -30,13 +30,15 @@ class RouteNLPParser {
         let session = LanguageModelSession()
 
         let instructions = """
-        You are a running route assistant. Parse the user's request into structured route parameters.
+        You are a route assistant. Parse the user's request into structured route parameters.
         - Extract the target distance in miles. If they say kilometers, convert to miles (1 km = 0.621371 mi).
         - Determine route type: "loop" (circular, returns to start), "outAndBack" (go out and return same way), or "pointToPoint" (one direction).
+        - Determine activity type: "running" if the user mentions running, run, or jog; "cycling" if the user mentions biking, cycling, bike ride, pedal, or bicycle; "walking" if they mention walking, hiking, or strolling.
         - If they mention a direction (e.g. "toward the city", "along the waterfront", "north"), extract it as directionPreference.
         - If they mention terrain (e.g. "flat", "hilly", "trail"), extract it as terrainPreference.
         - Default to "loop" if no route type is specified.
         - Default distance to 3.0 miles if no distance is specified.
+        - Default to "running" if no activity type is specified.
         """
 
         let prompt = instructions + "\n\nUser: " + userInput

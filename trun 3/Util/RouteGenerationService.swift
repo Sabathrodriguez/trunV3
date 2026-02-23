@@ -12,6 +12,7 @@ class RouteGenerationService: ObservableObject {
 
     private let nlpParser = RouteNLPParser()
     private let waypointGenerator = WaypointGenerator()
+    private let googleRoutesService = GoogleRoutesService()
 
     enum GenerationError: LocalizedError {
         case noUserLocation
@@ -32,7 +33,8 @@ class RouteGenerationService: ObservableObject {
 
     func generateRoute(
         userInput: String,
-        userLocation: CLLocationCoordinate2D
+        userLocation: CLLocationCoordinate2D,
+        activityType: ActivityType? = nil
     ) async throws -> (coordinates: [CLLocationCoordinate2D], gpxString: String, distanceMiles: Double) {
 
         await MainActor.run {
@@ -41,10 +43,22 @@ class RouteGenerationService: ObservableObject {
         }
 
         do {
-            let request = try await nlpParser.parseRequest(userInput)
+            var request = try await nlpParser.parseRequest(userInput)
+
+            // Override activity type if explicitly selected by the user
+            if let activityType = activityType {
+                request.activityType = activityType
+            }
+
+            let activityLabel: String
+            switch request.activityType {
+            case .running: activityLabel = "running"
+            case .walking: activityLabel = "walking"
+            case .cycling: activityLabel = "cycling"
+            }
 
             await MainActor.run {
-                generationProgress = "Planning \(String(format: "%.1f", request.targetDistanceMiles)) mile \(request.routeType.rawValue) route..."
+                generationProgress = "Planning \(String(format: "%.1f", request.targetDistanceMiles)) mile \(activityLabel) \(request.routeType.rawValue) route..."
             }
 
             var biasCoordinate: CLLocationCoordinate2D? = nil
@@ -65,10 +79,10 @@ class RouteGenerationService: ObservableObject {
 
             for iteration in 0..<maxIterations {
                 await MainActor.run {
-                    generationProgress = "Calculating route (attempt \(iteration + 1)/\(maxIterations))..."
+                    generationProgress = "Calculating \(activityLabel) route (attempt \(iteration + 1)/\(maxIterations))..."
                 }
 
-                let routeResult = try await assembleRoute(waypoints: waypoints)
+                let routeResult = try await assembleRoute(waypoints: waypoints, activityType: request.activityType)
                 finalCoordinates = routeResult.coordinates
                 finalDistance = routeResult.distanceMiles
 
@@ -117,6 +131,18 @@ class RouteGenerationService: ObservableObject {
     // MARK: - MKDirections Assembly
 
     private func assembleRoute(
+        waypoints: [CLLocationCoordinate2D],
+        activityType: ActivityType = .walking
+    ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMiles: Double) {
+
+        if activityType == .cycling {
+            return try await assembleCyclingRoute(waypoints: waypoints)
+        }
+
+        return try await assembleWalkingRoute(waypoints: waypoints)
+    }
+
+    private func assembleWalkingRoute(
         waypoints: [CLLocationCoordinate2D]
     ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMiles: Double) {
 
@@ -160,6 +186,15 @@ class RouteGenerationService: ObservableObject {
 
         let totalMiles = totalDistanceMeters * 0.000621371
         return (allCoordinates, totalMiles)
+    }
+
+    private func assembleCyclingRoute(
+        waypoints: [CLLocationCoordinate2D]
+    ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMiles: Double) {
+
+        let result = try await googleRoutesService.getCyclingRoute(waypoints: waypoints)
+        let totalMiles = result.distanceMeters * 0.000621371
+        return (result.coordinates, totalMiles)
     }
 
     // MARK: - Geocoding
