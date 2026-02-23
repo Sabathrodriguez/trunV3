@@ -463,7 +463,13 @@ struct ContentView: View {
                                 gpxString: pendingGPXString,
                                 distanceMiles: pendingDistance,
                                 coordinates: pendingCoords
-                            )
+                            ) { result in
+                                if case .failure(let error) = result {
+                                    alertTitle = "Upload Failed"
+                                    alertDetails = error.localizedDescription
+                                    showAlert = true
+                                }
+                            }
                         }
                         Button("Cancel", role: .cancel) {}
                     } message: {
@@ -471,8 +477,13 @@ struct ContentView: View {
                     }
                 }
             }
+            .alert(alertTitle, isPresented: $showAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(alertDetails)
+            }
         }
-    
+
     func requestHealthKitAccess() {
         healthStore.requestAuthorization{
             success, error in

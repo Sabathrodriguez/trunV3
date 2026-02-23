@@ -577,12 +577,16 @@ struct RunInfoView: View {
         modelContext.insert(runData)
         do {
             try modelContext.save()
-            clearRunInformation()
-            showAlert = true
-            alertTitle = "Success"
-            alertDetails = "Run saved!"
+            await MainActor.run {
+                clearRunInformation()
+            }
         } catch {
             print("Error saving run: \(error)")
+            await MainActor.run {
+                showAlert = true
+                alertTitle = "Error"
+                alertDetails = "Failed to save run: \(error.localizedDescription)"
+            }
         }
     }
 }

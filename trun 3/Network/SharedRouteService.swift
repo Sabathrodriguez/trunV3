@@ -18,51 +18,118 @@ class SharedRouteService: ObservableObject {
 
     private let db = Firestore.firestore()
 
+    enum PublishError: LocalizedError {
+        case duplicateRoute(String)
+        case notAuthenticated
+        case invalidData(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .duplicateRoute(let name):
+                return "A route named \"\(name)\" with a similar distance already exists."
+            case .notAuthenticated:
+                return "You must be signed in to share routes."
+            case .invalidData(let reason):
+                return reason
+            }
+        }
+    }
+
+    /// Check if a route with the same name (case-insensitive) and similar distance already exists.
+    private func checkForDuplicate(name: String, distanceMiles: Double, completion: @escaping (Bool) -> Void) {
+        let nameLower = name.lowercased()
+
+        db.collection("sharedRoutes")
+            .whereField("nameLower", isEqualTo: nameLower)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("Error checking for duplicate route: \(error)")
+                    completion(false)
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    completion(false)
+                    return
+                }
+
+                let isDuplicate = documents.contains { doc in
+                    let existingDistance = doc.data()["distanceMiles"] as? Double ?? 0
+                    return abs(existingDistance - distanceMiles) <= 0.5
+                }
+
+                completion(isDuplicate)
+            }
+    }
+
     /// Publish a route to the shared library with its center coordinates for geo-filtering.
-    func publishRoute(name: String, gpxString: String, distanceMiles: Double, coordinates: [CLLocationCoordinate2D]) {
+    func publishRoute(name: String, gpxString: String, distanceMiles: Double, coordinates: [CLLocationCoordinate2D], completion: @escaping (Result<Void, Error>) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             print("[DEBUG] publishRoute failed: No authenticated user (currentUser is nil)")
+            completion(.failure(PublishError.notAuthenticated))
             return
         }
         guard !coordinates.isEmpty else {
             print("[DEBUG] publishRoute failed: coordinates array is empty")
+            completion(.failure(PublishError.invalidData("No coordinates found.")))
             return
         }
 
         // Server-side validation before writing to Firestore
         guard gpxString.utf8.count <= GPXValidator.maxFileSizeBytes else {
             print("[DEBUG] publishRoute failed: GPX data too large (\(gpxString.utf8.count) bytes)")
+            completion(.failure(PublishError.invalidData("GPX data is too large.")))
             return
         }
         guard coordinates.count <= GPXValidator.maxCoordinateCount else {
             print("[DEBUG] publishRoute failed: too many coordinates (\(coordinates.count))")
+            completion(.failure(PublishError.invalidData("Too many coordinates.")))
             return
         }
         guard distanceMiles <= GPXValidator.maxDistanceMiles else {
             print("[DEBUG] publishRoute failed: route too long (\(distanceMiles) miles)")
+            completion(.failure(PublishError.invalidData("Route is too long.")))
             return
         }
 
-        print("[DEBUG] publishRoute: uid=\(uid), name=\(name), coords=\(coordinates.count), distance=\(distanceMiles)")
+        // Check for duplicate before publishing
+        checkForDuplicate(name: name, distanceMiles: distanceMiles) { [weak self] isDuplicate in
+            guard let self = self else { return }
 
-        // Calculate center point (average of all coordinates)
-        let centerLat = coordinates.map { $0.latitude }.reduce(0, +) / Double(coordinates.count)
-        let centerLon = coordinates.map { $0.longitude }.reduce(0, +) / Double(coordinates.count)
+            if isDuplicate {
+                DispatchQueue.main.async {
+                    completion(.failure(PublishError.duplicateRoute(name)))
+                }
+                return
+            }
 
-        let data: [String: Any] = [
-            "uid": uid,
-            "name": name,
-            "distanceMiles": distanceMiles,
-            "centerLat": centerLat,
-            "centerLon": centerLon,
-            "gpxData": gpxString,
-            "createdAt": FieldValue.serverTimestamp(),
-            "runCount": 0
-        ]
+            print("[DEBUG] publishRoute: uid=\(uid), name=\(name), coords=\(coordinates.count), distance=\(distanceMiles)")
 
-        db.collection("sharedRoutes").addDocument(data: data) { error in
-            if let error = error {
-                print("Error publishing route: \(error)")
+            // Calculate center point (average of all coordinates)
+            let centerLat = coordinates.map { $0.latitude }.reduce(0, +) / Double(coordinates.count)
+            let centerLon = coordinates.map { $0.longitude }.reduce(0, +) / Double(coordinates.count)
+
+            let data: [String: Any] = [
+                "uid": uid,
+                "name": name,
+                "nameLower": name.lowercased(),
+                "distanceMiles": distanceMiles,
+                "centerLat": centerLat,
+                "centerLon": centerLon,
+                "gpxData": gpxString,
+                "createdAt": FieldValue.serverTimestamp(),
+                "runCount": 0
+            ]
+
+            self.db.collection("sharedRoutes").addDocument(data: data) { error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error publishing route: \(error)")
+                        completion(.failure(error))
+                    } else {
+                        completion(.success(()))
+                    }
+                }
             }
         }
     }
