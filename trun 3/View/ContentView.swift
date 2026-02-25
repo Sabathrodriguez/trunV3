@@ -103,6 +103,8 @@ struct ContentView: View {
     @State private var isFileExporterPresented = false
     @State private var gpxDocument: GPXDocument?
     @State private var showRouteGenerator = false
+    @State private var showProfile = false
+    @StateObject private var profileService = ProfileService()
     
     // We can use the LocationManager from the view model if it's accessible,
     // but the provided UserLocation class seems separate. 
@@ -182,6 +184,7 @@ struct ContentView: View {
                 .onAppear {
                     viewModel.checkIfLocationServicesEnabled()
                     requestHealthKitAccess()
+                    profileService.fetchProfileImageURL()
                 }
                 .onChange(of: selectedRoute) { _ in
                     viewModel.centerOnUser()
@@ -195,6 +198,9 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         Menu {
+                            Button(action: { showProfile = true }) {
+                                Label("Profile", systemImage: "person.crop.circle")
+                            }
                             Button(action: { showDBInspector = true }) {
                                 Label("DB Inspector", systemImage: "cylinder.split.1x2")
                             }
@@ -202,18 +208,48 @@ struct ContentView: View {
                                 Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
                             }
                         } label: {
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(.white)
-                                .shadow(radius: 4)
+                            if let urlString = profileService.profileImageURL,
+                               let url = URL(string: urlString) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 32, height: 32)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                            .shadow(radius: 4)
+                                    default:
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.system(size: 28))
+                                            .foregroundColor(.white)
+                                            .shadow(radius: 4)
+                                    }
+                                }
                                 .padding(.trailing, 16)
                                 .padding(.top, 50)
+                            } else {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.white)
+                                    .shadow(radius: 4)
+                                    .padding(.trailing, 16)
+                                    .padding(.top, 50)
+                            }
                         }
                     }
                     Spacer()
                 }
                 .sheet(isPresented: $showDBInspector) {
                     DatabaseInspectorView()
+                }
+                .sheet(isPresented: $showProfile) {
+                    ProfileView(
+                        profileService: profileService,
+                        loginManager: loginManager,
+                        isPresented: $showProfile
+                    )
                 }
 
                 // LEADERBOARD OVERLAY (visible during active runs)
