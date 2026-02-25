@@ -57,6 +57,7 @@ struct RunInfoView: View {
     @State private var isImagePickerPresented = false
     
     @State var isRunDone: Bool = false
+    @State var routeCompleted: Bool = false
     @State var isSaving: Bool = false
     @State var prevRunDistance: Double = 0
     @State var prevRunMinute: Int = 0
@@ -448,6 +449,15 @@ struct RunInfoView: View {
         prevRunMinute = minute
         prevRunSecond = seconds
         prevRunDistance = locationManager.convertToMiles()
+
+        // Check if the runner completed the selected route before stopping tracking
+        if selectedRoute != nil, let loc = locationManager.location {
+            let progress = liveRunService.calculateRouteProgress(currentLocation: loc.coordinate)
+            routeCompleted = progress >= 0.90
+        } else {
+            routeCompleted = false
+        }
+
         inRunningMode = false
         locationManager.stopTracking()
         isTimerPaused = true
@@ -487,8 +497,8 @@ struct RunInfoView: View {
             if success { print("Run saved to HealthKit!") }
         }
 
-        // Save to route leaderboard in Firestore (only if a route was selected)
-        if let route = selectedRoute {
+        // Save to route leaderboard in Firestore (only if a route was selected and completed)
+        if let route = selectedRoute, routeCompleted {
             RouteLeaderboardService().saveCompletedRun(
                 routeID: route.id,
                 time: runData.time,
@@ -560,6 +570,7 @@ struct RunInfoView: View {
         prevRunSecond = ""
         prevRunDistance = 0
         isRunDone = false
+        routeCompleted = false
         isSaving = false
     }
     
