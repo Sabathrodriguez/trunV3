@@ -122,6 +122,66 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         // locationManager.stopUpdatingLocation()
     }
     
+    func createTCXString(totalTimeSeconds: Double, distanceMeters: Double) -> String {
+        let dateFormatter = ISO8601DateFormatter()
+
+        guard let firstLoc = recordedLocations.first else { return "" }
+        let startTime = dateFormatter.string(from: firstLoc.timestamp)
+
+        var tcx = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+          <Activities>
+            <Activity Sport="Running">
+              <Id>\(startTime)</Id>
+              <Lap StartTime="\(startTime)">
+                <TotalTimeSeconds>\(totalTimeSeconds)</TotalTimeSeconds>
+                <DistanceMeters>\(distanceMeters)</DistanceMeters>
+                <Intensity>Active</Intensity>
+                <TriggerMethod>Manual</TriggerMethod>
+                <Track>
+        """
+
+        var cumulativeDistance = 0.0
+        var previousLoc: CLLocation?
+
+        for loc in recordedLocations {
+            if let prev = previousLoc {
+                cumulativeDistance += loc.distance(from: prev)
+            }
+            previousLoc = loc
+
+            let time = dateFormatter.string(from: loc.timestamp)
+            let lat = loc.coordinate.latitude
+            let lon = loc.coordinate.longitude
+            let alt = loc.altitude
+
+            tcx += """
+
+                  <Trackpoint>
+                    <Time>\(time)</Time>
+                    <Position>
+                      <LatitudeDegrees>\(lat)</LatitudeDegrees>
+                      <LongitudeDegrees>\(lon)</LongitudeDegrees>
+                    </Position>
+                    <AltitudeMeters>\(alt)</AltitudeMeters>
+                    <DistanceMeters>\(cumulativeDistance)</DistanceMeters>
+                  </Trackpoint>
+            """
+        }
+
+        tcx += """
+
+                </Track>
+              </Lap>
+            </Activity>
+          </Activities>
+        </TrainingCenterDatabase>
+        """
+
+        return tcx
+    }
+
     func createGPXString() -> String {
         let dateFormatter = ISO8601DateFormatter()
         

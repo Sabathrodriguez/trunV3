@@ -17,8 +17,10 @@ final class Run {
     var caloriesBurned: Double
     var dateString: String
     var startTime: Date
+    var gpxString: String?
+    var stravaActivityID: String?
 
-    init(id: String? = nil, time: Double, distance: Double, averagePace: String, caloriesBurned: Double, dateString: String, startTime: Date) {
+    init(id: String? = nil, time: Double, distance: Double, averagePace: String, caloriesBurned: Double, dateString: String, startTime: Date, gpxString: String? = nil, stravaActivityID: String? = nil) {
         self.id = id
         self.time = time
         self.distance = distance
@@ -26,6 +28,8 @@ final class Run {
         self.caloriesBurned = caloriesBurned
         self.dateString = dateString
         self.startTime = startTime
+        self.gpxString = gpxString
+        self.stravaActivityID = stravaActivityID
     }
 }
 

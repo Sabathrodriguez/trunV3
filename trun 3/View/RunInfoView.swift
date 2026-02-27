@@ -68,6 +68,8 @@ struct RunInfoView: View {
     @Binding var alertDetails: String
 
     @State var prevRunMinPerMile: String = "0:00"
+    @StateObject private var stravaUploadService = StravaUploadService()
+    @ObservedObject private var stravaAuth = StravaAuthService.shared
                 
     var body: some View {
         let twoDecimalPlaceRun = String(format: "%.2f", locationManager.convertToMiles())
@@ -115,9 +117,35 @@ struct RunInfoView: View {
                         }
                         .disabled(isSaving)
                     }
+
+                    // Strava Export Button (visible when logged into Strava and TCX data exists)
+                    if stravaAuth.isAuthenticated {
+                    Button(action: {
+                        exportToStrava()
+                    }) {
+                        HStack(spacing: 8) {
+                            if case .uploading = stravaUploadService.uploadStatus {
+                                ProgressView()
+                                    .tint(.white)
+                            } else if case .processing = stravaUploadService.uploadStatus {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+
+                            Text(stravaButtonLabel)
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(stravaButtonColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(stravaButtonDisabled)
+                    }
                 }
                 .padding(.horizontal)
-                
+
             // --- STATE 2: IDLE (Pre-Run) ---
             } else if !inRunningMode {
                 // Search Bar
@@ -412,8 +440,65 @@ struct RunInfoView: View {
         .onAppear { checkCameraAvailability() }
     }
     
+    // MARK: - Strava Export
+
+    private var stravaButtonLabel: String {
+        if runData.stravaActivityID != nil {
+            return "Exported to Strava"
+        }
+        switch stravaUploadService.uploadStatus {
+        case .idle: return "Export to Strava"
+        case .uploading: return "Uploading..."
+        case .processing: return "Processing..."
+        case .success: return "Exported to Strava"
+        case .error(let msg): return "Failed: \(msg)"
+        }
+    }
+
+    private var stravaButtonColor: Color {
+        if runData.stravaActivityID != nil {
+            return Color.green
+        }
+        switch stravaUploadService.uploadStatus {
+        case .success: return .green
+        case .error: return .red
+        default: return .orange
+        }
+    }
+
+    private var stravaButtonDisabled: Bool {
+        if runData.stravaActivityID != nil { return true }
+        switch stravaUploadService.uploadStatus {
+        case .uploading, .processing, .success: return true
+        default: return false
+        }
+    }
+
+    private func exportToStrava() {
+        guard let tcx = runData.gpxString else { return }
+
+        if !stravaAuth.isAuthenticated {
+            stravaAuth.authenticate()
+            return
+        }
+
+        let runName = "trun Run - \(runData.dateString)"
+        Task {
+            do {
+                let activityID = try await stravaUploadService.uploadRun(tcxString: tcx, name: runName)
+                await MainActor.run {
+                    runData.stravaActivityID = activityID
+                }
+            } catch {
+                await MainActor.run {
+                    stravaUploadService.uploadStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
     // MARK: - Subviews & Logic
-    
+
     func SummaryRow(icon: String, title: String, value: String) -> some View {
         HStack {
             Image(systemName: icon)
@@ -429,6 +514,7 @@ struct RunInfoView: View {
         inRunningMode = true
         locationManager.distance = 0
         locationManager.startTracking()
+        locationManager.startRecording()
         isTimerPaused = false
         isPaused = false
         currentTimer = 0
@@ -458,6 +544,13 @@ struct RunInfoView: View {
             routeCompleted = false
         }
 
+        // Capture TCX data before stopping tracking (which resets location state)
+        locationManager.stopRecording()
+        let elapsedSeconds = Double(minute) * 60.0 + (Double(seconds) ?? 0)
+        let distanceMeters = locationManager.distance
+        let tcx = locationManager.createTCXString(totalTimeSeconds: elapsedSeconds, distanceMeters: distanceMeters)
+        runData.gpxString = tcx.isEmpty ? nil : tcx
+
         inRunningMode = false
         locationManager.stopTracking()
         isTimerPaused = true
@@ -465,6 +558,7 @@ struct RunInfoView: View {
         generator.prepare()
         generator.selectionChanged()
         isRunDone = true
+        runningMenuHeight = .large
 
         // Stop multiplayer session
         liveRunService.stopSession()

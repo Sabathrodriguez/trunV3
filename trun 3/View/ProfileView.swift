@@ -16,6 +16,7 @@ struct ProfileView: View {
 
     @State private var selectedItem: PhotosPickerItem?
     @State private var errorMessage: String?
+    @ObservedObject private var stravaAuth = StravaAuthService.shared
 
     private var userEmail: String {
         Auth.auth().currentUser?.email ?? "No email"
@@ -80,6 +81,43 @@ struct ProfileView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
+
+                // Strava Connection
+                VStack(spacing: 10) {
+                    Divider()
+                    if stravaAuth.isAuthenticated {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Connected to Strava")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Button("Disconnect") {
+                                stravaAuth.logout()
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.red)
+                        }
+                    } else {
+                        Button(action: {
+                            stravaAuth.authenticate()
+                        }) {
+                            HStack {
+                                Image(systemName: "figure.run")
+                                Text("Connect to Strava")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.orange)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
+                        }
+                    }
+                    Divider()
+                }
+                .padding(.horizontal)
 
                 Spacer()
 
