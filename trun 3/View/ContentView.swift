@@ -42,6 +42,7 @@ struct ContentView: View {
         
     @ObservedObject public var loginManager: LoginManager
     @StateObject var liveRunService = LiveRunService()
+    @StateObject var runSession = RunSessionManager()
     @State var inRunningMode: Bool = false
 
     let db = Firestore.firestore()
@@ -93,6 +94,7 @@ struct ContentView: View {
     
     // State for file importer/exporter
     @State private var showDBInspector = false
+    @State private var showProfileMenu = false
     @State private var showRouteNamePrompt = false
     @State private var routeName = ""
     @State private var pendingGPXString = ""
@@ -192,22 +194,16 @@ struct ContentView: View {
                 .onChange(of: routes) { _ in
                     RouteStorageService.saveRoutes(routes)
                 }
-                
-                // PROFILE MENU OVERLAY
+
+                // PROFILE BUTTON OVERLAY
                 VStack {
                     HStack {
                         Spacer()
-                        Menu {
-                            Button(action: { showProfile = true }) {
-                                Label("Profile", systemImage: "person.crop.circle")
-                            }
-                            Button(action: { showDBInspector = true }) {
-                                Label("DB Inspector", systemImage: "cylinder.split.1x2")
-                            }
-                            Button(role: .destructive, action: { loginManager.logout() }) {
-                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
-                            }
-                        } label: {
+                        Button(action: {
+                            showProfile = true
+                            showDBInspector = false
+                            runningMenuHeight = .large
+                        }) {
                             if let urlString = profileService.profileImageURL,
                                let url = URL(string: urlString) {
                                 AsyncImage(url: url) { phase in
@@ -227,29 +223,17 @@ struct ContentView: View {
                                             .shadow(radius: 4)
                                     }
                                 }
-                                .padding(.trailing, 16)
-                                .padding(.top, 50)
                             } else {
                                 Image(systemName: "person.circle.fill")
                                     .font(.system(size: 28))
                                     .foregroundColor(.white)
                                     .shadow(radius: 4)
-                                    .padding(.trailing, 16)
-                                    .padding(.top, 50)
                             }
                         }
+                        .padding(.trailing, 16)
+                        .padding(.top, 50)
                     }
                     Spacer()
-                }
-                .sheet(isPresented: $showDBInspector) {
-                    DatabaseInspectorView()
-                }
-                .sheet(isPresented: $showProfile) {
-                    ProfileView(
-                        profileService: profileService,
-                        loginManager: loginManager,
-                        isPresented: $showProfile
-                    )
                 }
 
                 // LEADERBOARD OVERLAY (visible during active runs)
@@ -294,6 +278,8 @@ struct ContentView: View {
                                 loginManager: loginManager,
                                 liveRunService: liveRunService,
                                 healthStore: healthStore,
+                                locationManager: locationManager,
+                                runSession: runSession,
                                 routes: $routes,
                                 selectedRoute: $selectedRoute,
                                 showAlert: $showAlert,
@@ -301,8 +287,18 @@ struct ContentView: View {
                                 alertDetails: $alertDetails
                             )
                             
-                            // ROUTE SELECTION (Visible when expanded)
+                            // EXPANDED CONTENT (Visible when expanded)
                             if runningMenuHeight == .large {
+                                if showProfile {
+                                    ProfileView(
+                                        profileService: profileService,
+                                        loginManager: loginManager,
+                                        isPresented: $showProfile,
+                                        showDBInspector: $showDBInspector
+                                    )
+                                } else if showDBInspector {
+                                    DatabaseInspectorView(isPresented: $showDBInspector)
+                                } else {
                                 ScrollView(.vertical, showsIndicators: true) {
                                 VStack(spacing: 16) {
                                 // MY ROUTES
@@ -545,6 +541,7 @@ struct ContentView: View {
                             } // end VStack
                             .padding(.horizontal)
                             } // end ScrollView
+                            } // end else (routes/default view)
                             }
                         }
                     }

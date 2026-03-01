@@ -10,7 +10,7 @@ import FirebaseFirestore
 
 struct DatabaseInspectorView: View {
     @StateObject private var routeService = SharedRouteService()
-    @Environment(\.dismiss) private var dismiss
+    @Binding var isPresented: Bool
 
     let builtInRoutes: [(id: Double, name: String)] = [
         (0, "3 mile red"), (1, "6 mile red"), (2, "10 mile red"),
@@ -79,7 +79,7 @@ struct DatabaseInspectorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") { dismiss() }
+                    Button("Done") { isPresented = false }
                 }
             }
             .onAppear { routeService.fetchAllRoutes() }
