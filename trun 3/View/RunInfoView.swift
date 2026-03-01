@@ -15,10 +15,9 @@ import UniformTypeIdentifiers
 
 struct RunInfoView: View {
     @Environment(\.modelContext) private var modelContext
-    
-    @State var runData: Run
-    @State var currentDate: Date
-    
+
+    @ObservedObject var runSession: RunSessionManager
+
     @ObservedObject var loginManager: LoginManager
     @ObservedObject var healthStore: HealthStore
     @Binding var selectedRun: Pace?
@@ -31,65 +30,51 @@ struct RunInfoView: View {
 
     @Binding var routes: [String: [Route]]
     @Binding var selectedRoute: Route?
-    
-    @State var isPaused: Bool = false
+
     @State var searchField: String = ""
-    
-    @StateObject var locationManager = LocationManager()
-    
+
+    @ObservedObject var locationManager: LocationManager
+
     @FocusState var isSearchFieldFocused: Bool
     @StateObject private var searchService = SharedRouteService()
     @State private var downloadingSearchRouteID: String?
-    
+
     @Environment(\.colorScheme) var colorScheme
 
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-    @State private var currentTimer = 0.0
-    @State private var isTimerPaused: Bool = false
-    @State private var runStartDate: Date = Date()
-    @State private var pausedDuration: Double = 0.0
-    @State private var pauseStartDate: Date? = nil
-    
+
     let generator = UISelectionFeedbackGenerator()
     private let cancelTimer = 1.5
-    
+
     @State private var isCameraAvailable = false
     @State private var isImagePickerPresented = false
-    
-    @State var isRunDone: Bool = false
-    @State var routeCompleted: Bool = false
-    @State var isSaving: Bool = false
-    @State var prevRunDistance: Double = 0
-    @State var prevRunMinute: Int = 0
-    @State var prevRunSecond: String = ""
-    
+
     @Binding var showAlert: Bool
     @Binding var alertTitle: String
     @Binding var alertDetails: String
 
-    @State var prevRunMinPerMile: String = "0:00"
     @StateObject private var stravaUploadService = StravaUploadService()
     @ObservedObject private var stravaAuth = StravaAuthService.shared
-                
+
     var body: some View {
         let twoDecimalPlaceRun = String(format: "%.2f", locationManager.convertToMiles())
-        let minute = Int(currentTimer/60)
-        let seconds = String(format: "%02d", Int(currentTimer) % 60)
-        
+        let minute = Int(runSession.currentTimer/60)
+        let seconds = String(format: "%02d", Int(runSession.currentTimer) % 60)
+
         VStack(spacing: 20) {
-            
+
             // --- STATE 1: RUN FINISHED SUMMARY ---
-            if isRunDone {
+            if runSession.isRunDone {
                 VStack(spacing: 25) {
                     VStack(spacing: 15) {
-                        SummaryRow(icon: "map.fill", title: "Distance", value: String(format: "%.2f mi", prevRunDistance))
-                        SummaryRow(icon: "stopwatch.fill", title: "Time", value: "\(prevRunMinute):\(prevRunSecond)")
-                        SummaryRow(icon: "speedometer", title: "Pace", value: "\(prevRunMinPerMile)/mi")
+                        SummaryRow(icon: "map.fill", title: "Distance", value: String(format: "%.2f mi", runSession.prevRunDistance))
+                        SummaryRow(icon: "stopwatch.fill", title: "Time", value: "\(runSession.prevRunMinute):\(runSession.prevRunSecond)")
+                        SummaryRow(icon: "speedometer", title: "Pace", value: "\(runSession.prevRunMinPerMile)/mi")
                     }
                     .padding()
                     .background(Color(UIColor.secondarySystemBackground))
                     .cornerRadius(16)
-                    
+
                     HStack(spacing: 20) {
                         Button(action: {
                              clearRunInformation()
@@ -102,20 +87,20 @@ struct RunInfoView: View {
                                 .foregroundColor(.red)
                                 .cornerRadius(12)
                         }
-                        
+
                         Button(action: {
                             saveRunAction()
                         }) {
-                            Text(isSaving ? "Saving..." : "Save Run")
+                            Text(runSession.isSaving ? "Saving..." : "Save Run")
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(isSaving ? Color.blue.opacity(0.5) : Color.blue)
+                                .background(runSession.isSaving ? Color.blue.opacity(0.5) : Color.blue)
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
                                 .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 5)
                         }
-                        .disabled(isSaving)
+                        .disabled(runSession.isSaving)
                     }
 
                     // Strava Export Button (visible when logged into Strava and TCX data exists)
@@ -251,9 +236,9 @@ struct RunInfoView: View {
                                 .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     // START BUTTON
                     Button(action: {
                         startRun()
@@ -263,15 +248,15 @@ struct RunInfoView: View {
                                 .fill(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
                                 .frame(width: 80, height: 80)
                                 .shadow(color: .green.opacity(0.4), radius: 10, x: 0, y: 5)
-                            
+
                             Text("GO")
                                 .font(.system(.title, design: .rounded).bold())
                                 .foregroundColor(.white)
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     // Location Button
                     Button(action: {
                         withAnimation { region.centerOnUser() }
@@ -284,7 +269,7 @@ struct RunInfoView: View {
                     }
                 }
                 .padding(.horizontal)
-                
+
             // --- STATE 3: RUNNING (Active) ---
             } else {
                 // LIVE METRICS
@@ -301,7 +286,7 @@ struct RunInfoView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 15) {
                         VStack(alignment: .leading) {
                             Text("TIME")
@@ -309,11 +294,11 @@ struct RunInfoView: View {
                             Text("\(minute):\(seconds)")
                                 .font(.system(size: 24, weight: .bold, design: .monospaced))
                         }
-                        
+
                         VStack(alignment: .leading) {
                             Text("PACE")
                                 .font(.caption2).bold().foregroundColor(.secondary)
-                            Text(prevRunMinPerMile)
+                            Text(runSession.prevRunMinPerMile)
                                 .font(.system(size: 20, weight: .medium, design: .rounded))
                         }
                     }
@@ -332,20 +317,20 @@ struct RunInfoView: View {
                             .background(Circle().fill(Color.gray.opacity(0.5)))
                     }
                     .disabled(!isCameraAvailable)
-                    
+
                     // Pause / Resume / Stop Logic
-                    if isPaused {
+                    if runSession.isPaused {
                         // LONG PRESS TO STOP
                         Button(action: {}) {
                             ZStack {
                                 Circle()
                                     .stroke(Color.red, lineWidth: 4)
                                     .frame(width: 80, height: 80)
-                                
+
                                 Circle()
                                     .fill(Color.red)
                                     .frame(width: 60, height: 60)
-                                
+
                                 Text("HOLD\nSTOP")
                                     .font(.caption2)
                                     .fontWeight(.bold)
@@ -356,16 +341,16 @@ struct RunInfoView: View {
                         .simultaneousGesture(LongPressGesture(minimumDuration: cancelTimer).onEnded { _ in
                             finishRun(minute: minute, seconds: seconds)
                         })
-                        
+
                         // RESUME BUTTON
                         Button(action: {
-                            if let pauseStart = pauseStartDate {
-                                pausedDuration += Date().timeIntervalSince(pauseStart)
+                            if let pauseStart = runSession.pauseStartDate {
+                                runSession.pausedDuration += Date().timeIntervalSince(pauseStart)
                             }
-                            pauseStartDate = nil
-                            isPaused = false
+                            runSession.pauseStartDate = nil
+                            runSession.isPaused = false
                             locationManager.startTracking()
-                            isTimerPaused = false
+                            runSession.isTimerPaused = false
                         }) {
                             Image(systemName: "play.fill")
                                 .font(.title)
@@ -373,21 +358,21 @@ struct RunInfoView: View {
                                 .frame(width: 50, height: 50)
                                 .background(Circle().fill(Color.green))
                         }
-                        
+
                     } else {
                         // PAUSE BUTTON
                         Button(action: {
-                            isPaused = true
+                            runSession.isPaused = true
                             locationManager.pauseTracking()
-                            isTimerPaused = true
-                            pauseStartDate = Date()
+                            runSession.isTimerPaused = true
+                            runSession.pauseStartDate = Date()
                         }) {
                             ZStack {
                                 Circle()
                                     .fill(Color.yellow)
                                     .frame(width: 80, height: 80)
                                     .shadow(color: .yellow.opacity(0.3), radius: 8)
-                                
+
                                 Image(systemName: "pause.fill")
                                     .font(.title)
                                     .foregroundColor(.white)
@@ -412,19 +397,19 @@ struct RunInfoView: View {
         }
         .padding()
         .onReceive(timer) { _ in
-            if !isTimerPaused {
-                currentTimer = Date().timeIntervalSince(runStartDate) - pausedDuration
-                let tick = Int(currentTimer * 10)
+            if !runSession.isTimerPaused {
+                runSession.currentTimer = Date().timeIntervalSince(runSession.runStartDate) - runSession.pausedDuration
+                let tick = Int(runSession.currentTimer * 10)
                 // Update pace every 3 seconds
                 if tick % 30 == 0 {
-                    prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: currentTimer / 60)
+                    runSession.prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
                 }
                 // Publish location to Firebase every 5 seconds
                 if tick % 50 == 0, inRunningMode, let loc = locationManager.location {
                     liveRunService.publishLocation(
                         location: loc,
                         distanceMiles: locationManager.convertToMiles(),
-                        pace: prevRunMinPerMile
+                        pace: runSession.prevRunMinPerMile
                     )
                 }
             }
@@ -439,11 +424,11 @@ struct RunInfoView: View {
         }
         .onAppear { checkCameraAvailability() }
     }
-    
+
     // MARK: - Strava Export
 
     private var stravaButtonLabel: String {
-        if runData.stravaActivityID != nil {
+        if runSession.runData.stravaActivityID != nil {
             return "Exported to Strava"
         }
         switch stravaUploadService.uploadStatus {
@@ -456,7 +441,7 @@ struct RunInfoView: View {
     }
 
     private var stravaButtonColor: Color {
-        if runData.stravaActivityID != nil {
+        if runSession.runData.stravaActivityID != nil {
             return Color.green
         }
         switch stravaUploadService.uploadStatus {
@@ -467,7 +452,7 @@ struct RunInfoView: View {
     }
 
     private var stravaButtonDisabled: Bool {
-        if runData.stravaActivityID != nil { return true }
+        if runSession.runData.stravaActivityID != nil { return true }
         switch stravaUploadService.uploadStatus {
         case .uploading, .processing, .success: return true
         default: return false
@@ -475,19 +460,19 @@ struct RunInfoView: View {
     }
 
     private func exportToStrava() {
-        guard let tcx = runData.gpxString else { return }
+        guard let tcx = runSession.runData.gpxString else { return }
 
         if !stravaAuth.isAuthenticated {
             stravaAuth.authenticate()
             return
         }
 
-        let runName = "trun Run - \(runData.dateString)"
+        let runName = "trun Run - \(runSession.runData.dateString)"
         Task {
             do {
                 let activityID = try await stravaUploadService.uploadRun(tcxString: tcx, name: runName)
                 await MainActor.run {
-                    runData.stravaActivityID = activityID
+                    runSession.runData.stravaActivityID = activityID
                 }
             } catch {
                 await MainActor.run {
@@ -509,20 +494,20 @@ struct RunInfoView: View {
             Text(value).bold()
         }
     }
-    
+
     func startRun() {
         inRunningMode = true
         locationManager.distance = 0
         locationManager.startTracking()
         locationManager.startRecording()
-        isTimerPaused = false
-        isPaused = false
-        currentTimer = 0
-        isRunDone = false
-        runData.startTime = Date()
-        runStartDate = runData.startTime
-        pausedDuration = 0.0
-        pauseStartDate = nil
+        runSession.isTimerPaused = false
+        runSession.isPaused = false
+        runSession.currentTimer = 0
+        runSession.isRunDone = false
+        runSession.runData.startTime = Date()
+        runSession.runStartDate = runSession.runData.startTime
+        runSession.pausedDuration = 0.0
+        runSession.pauseStartDate = nil
 
         // Start multiplayer session only if a route is selected
         if let route = selectedRoute {
@@ -530,18 +515,18 @@ struct RunInfoView: View {
             liveRunService.startSession(routeID: route.id, routeCoordinates: routeCoords)
         }
     }
-    
+
     func finishRun(minute: Int, seconds: String) {
-        prevRunMinute = minute
-        prevRunSecond = seconds
-        prevRunDistance = locationManager.convertToMiles()
+        runSession.prevRunMinute = minute
+        runSession.prevRunSecond = seconds
+        runSession.prevRunDistance = locationManager.convertToMiles()
 
         // Check if the runner completed the selected route before stopping tracking
         if selectedRoute != nil, let loc = locationManager.location {
             let progress = liveRunService.calculateRouteProgress(currentLocation: loc.coordinate)
-            routeCompleted = progress >= 0.90
+            runSession.routeCompleted = progress >= 0.90
         } else {
-            routeCompleted = false
+            runSession.routeCompleted = false
         }
 
         // Capture TCX data before stopping tracking (which resets location state)
@@ -549,72 +534,72 @@ struct RunInfoView: View {
         let elapsedSeconds = Double(minute) * 60.0 + (Double(seconds) ?? 0)
         let distanceMeters = locationManager.distance
         let tcx = locationManager.createTCXString(totalTimeSeconds: elapsedSeconds, distanceMeters: distanceMeters)
-        runData.gpxString = tcx.isEmpty ? nil : tcx
+        runSession.runData.gpxString = tcx.isEmpty ? nil : tcx
 
         inRunningMode = false
         locationManager.stopTracking()
-        isTimerPaused = true
-        currentTimer = 0
+        runSession.isTimerPaused = true
+        runSession.currentTimer = 0
         generator.prepare()
         generator.selectionChanged()
-        isRunDone = true
+        runSession.isRunDone = true
         runningMenuHeight = .large
 
         // Stop multiplayer session
         liveRunService.stopSession()
     }
-    
-    func saveRunAction() {
-        guard !isSaving else { return }
-        isSaving = true
 
-        currentDate = Date()
+    func saveRunAction() {
+        guard !runSession.isSaving else { return }
+        runSession.isSaving = true
+
+        runSession.currentDate = Date()
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .short
 
-        runData.averagePace = prevRunMinPerMile
-        runData.distance = prevRunDistance
-        runData.time = Double(prevRunMinute) + (Double(prevRunSecond) ?? 0)/60
-        runData.dateString = dateFormatter.string(from: currentDate)
+        runSession.runData.averagePace = runSession.prevRunMinPerMile
+        runSession.runData.distance = runSession.prevRunDistance
+        runSession.runData.time = Double(runSession.prevRunMinute) + (Double(runSession.prevRunSecond) ?? 0)/60
+        runSession.runData.dateString = dateFormatter.string(from: runSession.currentDate)
 
         Task {
             await uploadUserRun()
         }
 
         healthStore.saveRun(
-            startTime: runData.startTime,
+            startTime: runSession.runData.startTime,
             endTime: Date(),
-            distanceInMiles: prevRunDistance,
+            distanceInMiles: runSession.prevRunDistance,
             calories: 0
         ) { success, error in
             if success { print("Run saved to HealthKit!") }
         }
 
         // Save to route leaderboard in Firestore (only if a route was selected and completed)
-        if let route = selectedRoute, routeCompleted {
+        if let route = selectedRoute, runSession.routeCompleted {
             RouteLeaderboardService().saveCompletedRun(
                 routeID: route.id,
-                time: runData.time,
-                distance: prevRunDistance,
-                pace: prevRunMinPerMile,
+                time: runSession.runData.time,
+                distance: runSession.prevRunDistance,
+                pace: runSession.prevRunMinPerMile,
                 routeProgress: 1.0
             )
         }
     }
-    
+
     private func checkCameraAvailability() {
         AVCaptureDevice.requestAccess(for: .video) { granted in
             DispatchQueue.main.async { self.isCameraAvailable = granted }
         }
     }
-    
+
     private func saveImageToPhotoLibrary(image: UIImage) {
         PHPhotoLibrary.requestAuthorization { status in
             if status == .authorized { UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil) }
         }
     }
-    
+
     private func isSearchRouteAlreadyAdded(_ sharedRoute: SharedRoute) -> Bool {
         routes["Run Detroit"]?.contains { $0.name == sharedRoute.name } ?? false
     }
@@ -660,30 +645,32 @@ struct RunInfoView: View {
     }
 
     private func clearRunInformation() {
-        prevRunMinute = 0
-        prevRunSecond = ""
-        prevRunDistance = 0
-        isRunDone = false
-        routeCompleted = false
-        isSaving = false
+        runSession.prevRunMinute = 0
+        runSession.prevRunSecond = ""
+        runSession.prevRunDistance = 0
+        runSession.isRunDone = false
+        runSession.routeCompleted = false
+        runSession.isSaving = false
     }
-    
+
     private func calculateMilesPerMinute(distance: Double, time: Double) -> String {
         if time <= 0 { return "0:00" }
-        if distance <= 0 { return prevRunMinPerMile }
-        
+        if distance <= 0 { return runSession.prevRunMinPerMile }
+
         let minutesPerMile = time / distance
         let wholeMinutes = Int(minutesPerMile)
         let seconds = Int((minutesPerMile - Double(wholeMinutes)) * 60)
         return String(format: "%d:%02d", wholeMinutes, seconds)
     }
-    
+
     private func uploadUserRun() async {
-        modelContext.insert(runData)
+        modelContext.insert(runSession.runData)
         do {
             try modelContext.save()
             await MainActor.run {
                 clearRunInformation()
+                // Create a fresh Run for the next session
+                runSession.runData = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
             }
         } catch {
             print("Error saving run: \(error)")

@@ -20,6 +20,8 @@ struct RunView: View {
     @ObservedObject var liveRunService: LiveRunService
 
     @ObservedObject var healthStore: HealthStore
+    @ObservedObject var locationManager: LocationManager
+    @ObservedObject var runSession: RunSessionManager
 
     @Binding var routes: [String: [Route]]
 
@@ -29,14 +31,10 @@ struct RunView: View {
     @Binding var alertTitle: String
     @Binding var alertDetails: String
 
-    @State var runData: Run = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
-    @State var currentDate: Date = Date()
-
-
     var body: some View {
         VStack {
             // running info
-            RunInfoView(runData: runData, currentDate: currentDate, loginManager: loginManager, healthStore: healthStore, selectedRun: $selectedRun, runTypeDict: $runTypeDict, runningMenuHeight: $runningMenuHeight, searchWasClicked: $searchWasClicked, inRunningMode: $inRunningMode, region: userRegion, liveRunService: liveRunService, routes: $routes, selectedRoute: $selectedRoute, showAlert: $showAlert, alertTitle: $alertTitle, alertDetails: $alertDetails)
+            RunInfoView(runSession: runSession, loginManager: loginManager, healthStore: healthStore, selectedRun: $selectedRun, runTypeDict: $runTypeDict, runningMenuHeight: $runningMenuHeight, searchWasClicked: $searchWasClicked, inRunningMode: $inRunningMode, region: userRegion, liveRunService: liveRunService, routes: $routes, selectedRoute: $selectedRoute, locationManager: locationManager, showAlert: $showAlert, alertTitle: $alertTitle, alertDetails: $alertDetails)
         }
     }
 }
