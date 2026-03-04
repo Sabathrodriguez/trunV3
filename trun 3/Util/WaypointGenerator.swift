@@ -36,12 +36,20 @@ class WaypointGenerator {
 
     // MARK: - Loop Generation
 
-    private func generateLoopWaypoints(
+    private func loopWaypointCount(for distanceMiles: Double) -> Int {
+        switch distanceMiles {
+        case ..<2.0: return 5
+        case ..<5.0: return 6
+        default: return 8
+        }
+    }
+
+    func generateLoopWaypoints(
         start: CLLocationCoordinate2D,
         targetDistanceMiles: Double,
-        biasToward: CLLocationCoordinate2D?,
-        waypointCount: Int = 5
+        biasToward: CLLocationCoordinate2D?
     ) -> [CLLocationCoordinate2D] {
+        let waypointCount = loopWaypointCount(for: targetDistanceMiles)
         let radiusMiles = targetDistanceMiles / (2.0 * .pi)
         let radiusDegrees = radiusMiles * 0.0145
 
@@ -52,24 +60,27 @@ class WaypointGenerator {
             biasAngle = Double.random(in: 0..<(2.0 * .pi))
         }
 
+        // Compute center offset ONCE so all waypoints share the same offset
+        let centerOffsetLat: Double
+        let centerOffsetLon: Double
+        if biasToward != nil {
+            centerOffsetLat = radiusDegrees * 0.45 * cos(biasAngle)
+            centerOffsetLon = radiusDegrees * 0.45 * sin(biasAngle) / cos(start.latitude * .pi / 180)
+        } else {
+            let randomAngle = Double.random(in: 0..<(2.0 * .pi))
+            centerOffsetLat = radiusDegrees * 0.2 * cos(randomAngle)
+            centerOffsetLon = radiusDegrees * 0.2 * sin(randomAngle) / cos(start.latitude * .pi / 180)
+        }
+
         var waypoints: [CLLocationCoordinate2D] = [start]
 
         for i in 0..<waypointCount {
-            let fraction = Double(i) / Double(waypointCount)
+            // Half-step offset so no waypoint lands exactly on bias axis
+            let fraction = (Double(i) + 0.5) / Double(waypointCount)
             let angle = biasAngle + (fraction * 2.0 * .pi)
 
             let jitter = Double.random(in: 0.8...1.2)
             let r = radiusDegrees * jitter
-
-            let centerOffsetLat: Double
-            let centerOffsetLon: Double
-            if biasToward != nil {
-                centerOffsetLat = radiusDegrees * 0.3 * cos(biasAngle)
-                centerOffsetLon = radiusDegrees * 0.3 * sin(biasAngle) / cos(start.latitude * .pi / 180)
-            } else {
-                centerOffsetLat = 0
-                centerOffsetLon = 0
-            }
 
             let lat = start.latitude + centerOffsetLat + r * cos(angle)
             let lon = start.longitude + centerOffsetLon + r * sin(angle) / cos(start.latitude * .pi / 180)

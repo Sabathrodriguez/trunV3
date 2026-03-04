@@ -14,7 +14,38 @@ struct DirectionalArrow: Identifiable {
     let bearing: Double
 }
 
+struct RainbowSegment: Identifiable {
+    let id = UUID()
+    let coordinates: [CLLocationCoordinate2D]
+    let color: Color
+}
+
 enum RouteAnnotationHelpers {
+
+    /// Split route coordinates into segments, each with a rainbow color.
+    static func rainbowSegments(from coords: [CLLocationCoordinate2D], segmentCount: Int = 30) -> [RainbowSegment] {
+        guard coords.count >= 2 else { return [] }
+
+        let rainbowColors: [Color] = (0..<segmentCount).map { i in
+            Color(hue: Double(i) / Double(segmentCount), saturation: 0.9, brightness: 0.95)
+        }
+
+        let pointsPerSegment = max(2, coords.count / segmentCount)
+        var segments: [RainbowSegment] = []
+
+        for i in 0..<segmentCount {
+            let startIdx = i * pointsPerSegment
+            let endIdx = (i == segmentCount - 1) ? coords.count : min((i + 1) * pointsPerSegment + 1, coords.count)
+            guard startIdx < coords.count && endIdx > startIdx else { continue }
+
+            let slice = Array(coords[startIdx..<endIdx])
+            if slice.count >= 2 {
+                segments.append(RainbowSegment(coordinates: slice, color: rainbowColors[i]))
+            }
+        }
+
+        return segments
+    }
 
     static func bearing(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> Double {
         let lat1 = start.latitude * .pi / 180

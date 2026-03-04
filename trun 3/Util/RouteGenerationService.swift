@@ -3,12 +3,20 @@ import MapKit
 import CoreLocation
 
 @available(iOS 26.0, *)
+struct RouteOption: Identifiable {
+    let id = UUID()
+    let source: String
+    let coordinates: [CLLocationCoordinate2D]
+    let gpxString: String
+    let distanceMiles: Double
+}
+
+@available(iOS 26.0, *)
 class RouteGenerationService: ObservableObject {
 
     @Published var isGenerating: Bool = false
     @Published var generationProgress: String = ""
-    @Published var previewCoordinates: [CLLocationCoordinate2D]?
-    @Published var generatedDistanceMiles: Double = 0
+    @Published var routeOptions: [RouteOption] = []
 
     private let nlpParser = RouteNLPParser()
     private let waypointGenerator = WaypointGenerator()
@@ -18,6 +26,7 @@ class RouteGenerationService: ObservableObject {
         case noUserLocation
         case directionsUnavailable(String)
         case geocodingFailed
+        case noRoutesGenerated
 
         var errorDescription: String? {
             switch self {
@@ -27,6 +36,8 @@ class RouteGenerationService: ObservableObject {
                 return "Could not calculate walking directions: \(reason)"
             case .geocodingFailed:
                 return "Could not find the specified location."
+            case .noRoutesGenerated:
+                return "Neither routing service could generate a route. Please try again."
             }
         }
     }
@@ -35,17 +46,17 @@ class RouteGenerationService: ObservableObject {
         userInput: String,
         userLocation: CLLocationCoordinate2D,
         activityType: ActivityType? = nil
-    ) async throws -> (coordinates: [CLLocationCoordinate2D], gpxString: String, distanceMiles: Double) {
+    ) async throws {
 
         await MainActor.run {
             isGenerating = true
             generationProgress = "Understanding your request..."
+            routeOptions = []
         }
 
         do {
             var request = try await nlpParser.parseRequest(userInput)
 
-            // Override activity type if explicitly selected by the user
             if let activityType = activityType {
                 request.activityType = activityType
             }
@@ -66,58 +77,70 @@ class RouteGenerationService: ObservableObject {
                 biasCoordinate = try? await geocodeDirection(dirPref)
             }
 
-            var waypoints = waypointGenerator.generateWaypoints(
+            let waypoints = waypointGenerator.generateWaypoints(
                 from: userLocation,
                 request: request,
                 directionBiasCoordinate: biasCoordinate
             )
 
-            let maxIterations = 3
-            let tolerance = 0.15
-            var finalCoordinates: [CLLocationCoordinate2D] = []
-            var finalDistance: Double = 0
+            var options: [RouteOption] = []
 
-            for iteration in 0..<maxIterations {
+            if request.activityType == .cycling {
+                // Cycling: Google Routes only (with distance-accuracy loop)
                 await MainActor.run {
-                    generationProgress = "Calculating \(activityLabel) route (attempt \(iteration + 1)/\(maxIterations))..."
+                    generationProgress = "Calculating cycling route..."
                 }
 
-                let routeResult = try await assembleRoute(waypoints: waypoints, activityType: request.activityType)
-                finalCoordinates = routeResult.coordinates
-                finalDistance = routeResult.distanceMiles
-
-                let ratio = finalDistance / request.targetDistanceMiles
-                if abs(ratio - 1.0) <= tolerance {
-                    break
+                if let route = await fetchGoogleRoute(
+                    waypoints: waypoints,
+                    activityType: .cycling,
+                    targetDistanceMiles: request.targetDistanceMiles,
+                    userLocation: userLocation
+                ) {
+                    options.append(route)
+                }
+            } else {
+                // Walking/Running: fetch from both APIs in parallel
+                await MainActor.run {
+                    generationProgress = "Calculating routes from Apple Maps & Google..."
                 }
 
-                if iteration < maxIterations - 1 {
-                    let scaleFactor = request.targetDistanceMiles / finalDistance
-                    waypoints = waypointGenerator.adjustWaypoints(
-                        waypoints,
-                        around: userLocation,
-                        scaleFactor: scaleFactor
-                    )
+                // Apple Maps with distance-accuracy loop
+                async let appleResult = fetchAppleMapsRoute(
+                    waypoints: waypoints,
+                    request: request,
+                    userLocation: userLocation,
+                    activityLabel: activityLabel
+                )
+
+                // Google Routes (with distance-accuracy loop)
+                async let googleResult = fetchGoogleRoute(
+                    waypoints: waypoints,
+                    activityType: request.activityType,
+                    targetDistanceMiles: request.targetDistanceMiles,
+                    userLocation: userLocation
+                )
+
+                let apple = await appleResult
+                let google = await googleResult
+
+                if let apple = apple {
+                    options.append(apple)
+                }
+                if let google = google {
+                    options.append(google)
                 }
             }
 
-            await MainActor.run {
-                generationProgress = "Generating route file..."
-                previewCoordinates = finalCoordinates
-                generatedDistanceMiles = finalDistance
+            guard !options.isEmpty else {
+                throw GenerationError.noRoutesGenerated
             }
 
-            let gpxString = createGPXString(from: finalCoordinates)
-
-            try GPXValidator.validateContent(gpxString)
-            try GPXValidator.validateCoordinates(finalCoordinates)
-
             await MainActor.run {
+                routeOptions = options
                 isGenerating = false
                 generationProgress = "Done!"
             }
-
-            return (finalCoordinates, gpxString, finalDistance)
 
         } catch {
             await MainActor.run {
@@ -128,19 +151,113 @@ class RouteGenerationService: ObservableObject {
         }
     }
 
-    // MARK: - MKDirections Assembly
+    // MARK: - Apple Maps Route (with distance-accuracy loop)
 
-    private func assembleRoute(
+    private func fetchAppleMapsRoute(
         waypoints: [CLLocationCoordinate2D],
-        activityType: ActivityType = .walking
-    ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMiles: Double) {
+        request: RouteRequest,
+        userLocation: CLLocationCoordinate2D,
+        activityLabel: String
+    ) async -> RouteOption? {
+        do {
+            var currentWaypoints = waypoints
+            let maxIterations = 3
+            let tolerance = 0.15
+            var finalCoordinates: [CLLocationCoordinate2D] = []
+            var finalDistance: Double = 0
 
-        if activityType == .cycling {
-            return try await assembleCyclingRoute(waypoints: waypoints)
+            for iteration in 0..<maxIterations {
+                let routeResult = try await assembleWalkingRoute(waypoints: currentWaypoints)
+                finalCoordinates = routeResult.coordinates
+                finalDistance = routeResult.distanceMiles
+
+                let ratio = finalDistance / request.targetDistanceMiles
+                if abs(ratio - 1.0) <= tolerance {
+                    break
+                }
+
+                if iteration < maxIterations - 1 {
+                    let scaleFactor = request.targetDistanceMiles / finalDistance
+                    currentWaypoints = waypointGenerator.adjustWaypoints(
+                        currentWaypoints,
+                        around: userLocation,
+                        scaleFactor: scaleFactor
+                    )
+                }
+            }
+
+            let gpx = createGPXString(from: finalCoordinates)
+            try GPXValidator.validateCoordinates(finalCoordinates)
+
+            return RouteOption(
+                source: "Apple Maps",
+                coordinates: finalCoordinates,
+                gpxString: gpx,
+                distanceMiles: finalDistance
+            )
+        } catch {
+            print("Apple Maps route failed: \(error.localizedDescription)")
+            return nil
         }
-
-        return try await assembleWalkingRoute(waypoints: waypoints)
     }
+
+    // MARK: - Google Routes
+
+    private func fetchGoogleRoute(
+        waypoints: [CLLocationCoordinate2D],
+        activityType: ActivityType,
+        targetDistanceMiles: Double,
+        userLocation: CLLocationCoordinate2D
+    ) async -> RouteOption? {
+        do {
+            var currentWaypoints = waypoints
+            let maxIterations = 3
+            let tolerance = 0.15
+            var finalCoordinates: [CLLocationCoordinate2D] = []
+            var finalDistance: Double = 0
+
+            for iteration in 0..<maxIterations {
+                let result: (coordinates: [CLLocationCoordinate2D], distanceMeters: Double)
+                if activityType == .cycling {
+                    result = try await googleRoutesService.getCyclingRoute(waypoints: currentWaypoints)
+                } else {
+                    result = try await googleRoutesService.getWalkingRoute(waypoints: currentWaypoints)
+                }
+
+                finalCoordinates = result.coordinates
+                finalDistance = result.distanceMeters * 0.000621371
+
+                let ratio = finalDistance / targetDistanceMiles
+                if abs(ratio - 1.0) <= tolerance {
+                    break
+                }
+
+                if iteration < maxIterations - 1 {
+                    let scaleFactor = targetDistanceMiles / finalDistance
+                    currentWaypoints = waypointGenerator.adjustWaypoints(
+                        currentWaypoints,
+                        around: userLocation,
+                        scaleFactor: scaleFactor
+                    )
+                }
+            }
+
+            let gpx = createGPXString(from: finalCoordinates)
+            try GPXValidator.validateCoordinates(finalCoordinates)
+
+            return RouteOption(
+                source: "Google Routes",
+                coordinates: finalCoordinates,
+                gpxString: gpx,
+                distanceMiles: finalDistance
+            )
+        } catch {
+            print("Google Routes failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // MARK: - MKDirections Assembly
 
     private func assembleWalkingRoute(
         waypoints: [CLLocationCoordinate2D]
@@ -186,15 +303,6 @@ class RouteGenerationService: ObservableObject {
 
         let totalMiles = totalDistanceMeters * 0.000621371
         return (allCoordinates, totalMiles)
-    }
-
-    private func assembleCyclingRoute(
-        waypoints: [CLLocationCoordinate2D]
-    ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMiles: Double) {
-
-        let result = try await googleRoutesService.getCyclingRoute(waypoints: waypoints)
-        let totalMiles = result.distanceMeters * 0.000621371
-        return (result.coordinates, totalMiles)
     }
 
     // MARK: - Geocoding

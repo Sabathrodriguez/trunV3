@@ -34,9 +34,10 @@ class GoogleRoutesService {
         return key
     }
 
-    /// Get a cycling-friendly route through the given waypoints using Google Maps Routes API.
-    func getCyclingRoute(
-        waypoints: [CLLocationCoordinate2D]
+    /// Get a route through the given waypoints using Google Maps Routes API.
+    func getRoute(
+        waypoints: [CLLocationCoordinate2D],
+        travelMode: String = "WALK"
     ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMeters: Double) {
         guard waypoints.count >= 2 else {
             throw RoutesError.noRouteFound
@@ -53,7 +54,8 @@ class GoogleRoutesService {
         let body = buildRequestBody(
             origin: origin,
             destination: destination,
-            intermediates: intermediates
+            intermediates: intermediates,
+            travelMode: travelMode
         )
 
         var request = URLRequest(url: URL(string: endpoint)!)
@@ -102,17 +104,32 @@ class GoogleRoutesService {
         return (coordinates, distanceMeters)
     }
 
+    /// Convenience for cycling routes.
+    func getCyclingRoute(
+        waypoints: [CLLocationCoordinate2D]
+    ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMeters: Double) {
+        try await getRoute(waypoints: waypoints, travelMode: "BICYCLE")
+    }
+
+    /// Convenience for walking routes.
+    func getWalkingRoute(
+        waypoints: [CLLocationCoordinate2D]
+    ) async throws -> (coordinates: [CLLocationCoordinate2D], distanceMeters: Double) {
+        try await getRoute(waypoints: waypoints, travelMode: "WALK")
+    }
+
     // MARK: - Request Body
 
     private func buildRequestBody(
         origin: CLLocationCoordinate2D,
         destination: CLLocationCoordinate2D,
-        intermediates: [CLLocationCoordinate2D]
+        intermediates: [CLLocationCoordinate2D],
+        travelMode: String = "BICYCLE"
     ) -> [String: Any] {
         var body: [String: Any] = [
             "origin": locationWaypoint(origin),
             "destination": locationWaypoint(destination),
-            "travelMode": "BICYCLE"
+            "travelMode": travelMode
         ]
 
         if !intermediates.isEmpty {

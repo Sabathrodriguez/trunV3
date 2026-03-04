@@ -127,10 +127,11 @@ struct ContentView: View {
                     if let route = selectedRoute,
                        let coords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL),
                        !coords.isEmpty {
-                        let routeColor = Color(red: route.color[0], green: route.color[1], blue: route.color[2])
-
-                        MapPolyline(coordinates: coords)
-                            .stroke(routeColor, lineWidth: 4)
+                        // Rainbow route segments
+                        ForEach(RouteAnnotationHelpers.rainbowSegments(from: coords)) { segment in
+                            MapPolyline(coordinates: segment.coordinates)
+                                .stroke(segment.color, lineWidth: 5)
+                        }
 
                         // Start annotation
                         Annotation("Start", coordinate: coords.first!) {
@@ -156,8 +157,9 @@ struct ContentView: View {
                         ForEach(RouteAnnotationHelpers.generateArrows(from: coords)) { arrow in
                             Annotation("", coordinate: arrow.coordinate, anchor: .center) {
                                 Image(systemName: "arrowtriangle.forward.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(routeColor)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white)
+                                    .shadow(color: .black, radius: 1)
                                     .rotationEffect(.degrees(arrow.bearing - 90))
                             }
                         }
@@ -190,6 +192,12 @@ struct ContentView: View {
                 }
                 .onChange(of: selectedRoute) { _ in
                     viewModel.centerOnUser()
+                    // Keep the sheet expanded when selecting a route from the list
+                    if runningMenuHeight == .large {
+                        DispatchQueue.main.async {
+                            runningMenuHeight = .large
+                        }
+                    }
                 }
                 .onChange(of: routes) { _ in
                     RouteStorageService.saveRoutes(routes)
@@ -199,11 +207,17 @@ struct ContentView: View {
                 VStack {
                     HStack {
                         Spacer()
-                        Button(action: {
-                            showProfile = true
-                            showDBInspector = false
-                            runningMenuHeight = .large
-                        }) {
+                        Menu {
+                            Button(action: { showProfile = true }) {
+                                Label("Profile", systemImage: "person.crop.circle")
+                            }
+                            // Button(action: { showDBInspector = true }) {
+                            //     Label("DB Inspector", systemImage: "cylinder.split.1x2")
+                            // }
+                            Button(role: .destructive, action: { loginManager.logout() }) {
+                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        } label: {
                             if let urlString = profileService.profileImageURL,
                                let url = URL(string: urlString) {
                                 AsyncImage(url: url) { phase in
@@ -449,15 +463,15 @@ struct ContentView: View {
                                 )
 
                                 // IMPORT / EXPORT / SHARE CONTROLS
-                                HStack(spacing: 12) {
+                                VStack(spacing: 10) {
                                     // Import Button (local only)
                                     Button(action: { isFileImporterPresented = true }) {
                                         Label("Import", systemImage: "folder.badge.plus")
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.white)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 10)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
                                             .background(Color.blue)
                                             .cornerRadius(12)
                                     }
@@ -477,8 +491,8 @@ struct ContentView: View {
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.white)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 10)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
                                             .background(Color.green)
                                             .cornerRadius(12)
                                     }
@@ -517,8 +531,8 @@ struct ContentView: View {
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.white)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 10)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
                                             .background(locationManager.isRecording ? Color.red : Color.orange)
                                             .cornerRadius(12)
                                     }
@@ -530,8 +544,8 @@ struct ContentView: View {
                                                 .font(.subheadline)
                                                 .fontWeight(.semibold)
                                                 .foregroundColor(.white)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 10)
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 14)
                                                 .background(Color.purple)
                                                 .cornerRadius(12)
                                         }

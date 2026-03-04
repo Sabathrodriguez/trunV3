@@ -29,10 +29,12 @@ class RouteNLPParser {
 
         let session = LanguageModelSession()
 
+        print("Parsing user input with on-device model: \(userInput)")
+
         let instructions = """
         You are a route assistant. Parse the user's request into structured route parameters.
         - Extract the target distance in miles. If they say kilometers, convert to miles (1 km = 0.621371 mi).
-        - Determine route type: "loop" (circular, returns to start), "outAndBack" (go out and return same way), or "pointToPoint" (one direction).
+        - Determine route type: "loop" (circular, returns to start), "outAndBack" (out and back, there and back) (go out and return same way), or "pointToPoint, point to point, one-way" (one direction).
         - Determine activity type: "running" if the user mentions running, run, or jog; "cycling" if the user mentions biking, cycling, bike ride, pedal, or bicycle; "walking" if they mention walking, hiking, or strolling.
         - If they mention a direction (e.g. "toward the city", "along the waterfront", "north"), extract it as directionPreference.
         - If they mention terrain (e.g. "flat", "hilly", "trail"), extract it as terrainPreference.
@@ -57,6 +59,10 @@ class RouteNLPParser {
             throw ParsingError.invalidDistance(result.targetDistanceMiles)
         }
 
+        print("Parsed RouteRequest: \(result)")
+        print(result)
+        print(response.rawContent)
+        print(response.content.routeType)
         return result
     }
 }

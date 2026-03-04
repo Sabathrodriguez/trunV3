@@ -16,11 +16,7 @@ struct RouteGeneratorView: View {
     @State private var routeName: String = ""
     @State private var showError: Bool = false
     @State private var errorMessage: String = ""
-    @State private var generatedResult: (
-        coordinates: [CLLocationCoordinate2D],
-        gpxString: String,
-        distanceMiles: Double
-    )? = nil
+    @State private var selectedOption: RouteOption? = nil
     @State private var showNamePrompt: Bool = false
     @State private var selectedActivityType: ActivityType = .running
     @State private var showFileExporter: Bool = false
@@ -99,36 +95,21 @@ struct RouteGeneratorView: View {
                 .disabled(userInput.isEmpty || generationService.isGenerating)
                 .padding(.horizontal)
 
-                if let coords = generationService.previewCoordinates, !coords.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(String(format: "%.1f miles", generationService.generatedDistanceMiles))
-                                .font(.subheadline)
-                                .fontWeight(.bold)
-                            Spacer()
-                        }
+                if !generationService.routeOptions.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Choose a route")
+                            .font(.headline)
+                            .padding(.horizontal)
 
-                        Map {
-                            MapPolyline(coordinates: coords)
-                                .stroke(activityColor, lineWidth: 3)
-
-                            ForEach(RouteAnnotationHelpers.generateArrows(from: coords)) { arrow in
-                                Annotation("", coordinate: arrow.coordinate, anchor: .center) {
-                                    Image(systemName: "arrowtriangle.forward.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundColor(activityColor)
-                                        .rotationEffect(.degrees(arrow.bearing - 90))
-                                }
-                            }
+                        ForEach(generationService.routeOptions) { option in
+                            routeOptionCard(option)
+                                .padding(.horizontal)
                         }
-                        .frame(height: 200)
-                        .cornerRadius(12)
                     }
-                    .padding(.horizontal)
 
                     HStack(spacing: 12) {
                         Button("Regenerate") {
-                            generatedResult = nil
+                            selectedOption = nil
                             generateRoute()
                         }
                         .frame(maxWidth: .infinity)
@@ -142,9 +123,10 @@ struct RouteGeneratorView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.green)
+                        .background(selectedOption != nil ? Color.green : Color.gray)
                         .foregroundColor(.white)
                         .cornerRadius(12)
+                        .disabled(selectedOption == nil)
                     }
                     .padding(.horizontal)
                 }
@@ -192,6 +174,60 @@ struct RouteGeneratorView: View {
         }
     }
 
+    // MARK: - Route Option Card
+
+    @ViewBuilder
+    private func routeOptionCard(_ option: RouteOption) -> some View {
+        let isSelected = selectedOption?.id == option.id
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: option.source == "Apple Maps" ? "map.fill" : "globe")
+                    .foregroundColor(option.source == "Apple Maps" ? .blue : .orange)
+                Text(option.source)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text(String(format: "%.1f mi", option.distanceMiles))
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+            }
+
+            Map {
+                ForEach(RouteAnnotationHelpers.rainbowSegments(from: option.coordinates)) { segment in
+                    MapPolyline(coordinates: segment.coordinates)
+                        .stroke(segment.color, lineWidth: 4)
+                }
+
+                ForEach(RouteAnnotationHelpers.generateArrows(from: option.coordinates)) { arrow in
+                    Annotation("", coordinate: arrow.coordinate, anchor: .center) {
+                        Image(systemName: "arrowtriangle.forward.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .shadow(color: .black, radius: 1)
+                            .rotationEffect(.degrees(arrow.bearing - 90))
+                    }
+                }
+            }
+            .frame(height: 180)
+            .cornerRadius(10)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(UIColor.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(isSelected ? activityColor : Color.clear, lineWidth: 3)
+        )
+        .onTapGesture {
+            selectedOption = option
+        }
+    }
+
+    // MARK: - Helpers
+
     private var activityColor: Color {
         switch selectedActivityType {
         case .running: return .purple
@@ -225,31 +261,35 @@ struct RouteGeneratorView: View {
 
         Task {
             do {
-                let result = try await generationService.generateRoute(
+                try await generationService.generateRoute(
                     userInput: userInput,
                     userLocation: location,
                     activityType: selectedActivityType
                 )
                 await MainActor.run {
-                    generatedResult = result
+                    // Auto-select the first option
+                    if let first = generationService.routeOptions.first {
+                        selectedOption = first
+                    }
                 }
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     showError = true
+                    print("Route generation error: \(errorMessage)")
                 }
             }
         }
     }
 
     private func saveRoute() {
-        guard let result = generatedResult else { return }
+        guard let option = selectedOption else { return }
 
         let sanitized = GPXValidator.sanitizeRouteName(routeName)
         let name = sanitized.isEmpty ? "AI Route" : sanitized
         let filename = name.replacingOccurrences(of: " ", with: "_") + ".gpx"
 
-        gpxDocumentToExport = GPXDocument(text: result.gpxString)
+        gpxDocumentToExport = GPXDocument(text: option.gpxString)
         exportFileName = filename
         showFileExporter = true
     }
