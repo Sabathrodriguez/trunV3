@@ -94,7 +94,6 @@ struct ContentView: View {
     
     // State for file importer/exporter
     @State private var showDBInspector = false
-    @State private var showProfileMenu = false
     @State private var showRouteNamePrompt = false
     @State private var routeName = ""
     @State private var pendingGPXString = ""
@@ -157,7 +156,7 @@ struct ContentView: View {
                         ForEach(RouteAnnotationHelpers.generateArrows(from: coords)) { arrow in
                             Annotation("", coordinate: arrow.coordinate, anchor: .center) {
                                 Image(systemName: "arrowtriangle.forward.fill")
-                                    .font(.system(size: 14))
+                                    .font(.system(size: 10))
                                     .foregroundColor(.white)
                                     .shadow(color: .black, radius: 1)
                                     .rotationEffect(.degrees(arrow.bearing - 90))
@@ -207,17 +206,11 @@ struct ContentView: View {
                 VStack {
                     HStack {
                         Spacer()
-                        Menu {
-                            Button(action: { showProfile = true }) {
-                                Label("Profile", systemImage: "person.crop.circle")
-                            }
-                            // Button(action: { showDBInspector = true }) {
-                            //     Label("DB Inspector", systemImage: "cylinder.split.1x2")
-                            // }
-                            Button(role: .destructive, action: { loginManager.logout() }) {
-                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
-                            }
-                        } label: {
+                        Button(action: {
+                            showProfile = true
+                            showDBInspector = false
+                            runningMenuHeight = .large
+                        }) {
                             if let urlString = profileService.profileImageURL,
                                let url = URL(string: urlString) {
                                 AsyncImage(url: url) { phase in
