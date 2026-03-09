@@ -11,4 +11,5 @@ struct Route: Identifiable, Hashable, Codable, Equatable {
     var name: String
     var GPXFileURL: String
     var color: [Double]
+    var sharedRouteID: String?
 }

@@ -16,6 +16,7 @@ enum LeaderboardTab: String, CaseIterable {
 struct RouteLeaderboardView: View {
     let routeID: Double
     let routeName: String
+    let sharedRouteID: String?
     let liveRunners: [Runner]
     let isRunning: Bool
     @StateObject private var service = RouteLeaderboardService()
@@ -65,7 +66,14 @@ struct RouteLeaderboardView: View {
         .background(Color(UIColor.secondarySystemBackground))
         .cornerRadius(16)
         .onAppear {
-            service.fetchLeaderboard(routeID: routeID)
+            if let sharedRouteID = sharedRouteID {
+                service.fetchLeaderboard(sharedRouteID: sharedRouteID)
+            }
+        }
+        .onChange(of: sharedRouteID) { newID in
+            if let newID = newID {
+                service.fetchLeaderboard(sharedRouteID: newID)
+            }
         }
     }
 

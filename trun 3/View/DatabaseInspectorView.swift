@@ -121,7 +121,7 @@ struct SharedRouteDetailView: View {
                     }
                 }
             } header: {
-                Text("Leaderboard (routes/\(route.id)/runs)")
+                Text("Leaderboard (routeLeaderboards/\(route.id)/runs)")
             }
         }
         .navigationTitle(route.name)
@@ -157,7 +157,7 @@ struct LeaderboardDetailView: View {
                     }
                 }
             } header: {
-                Text("Firestore: routes/\(routeKey)/runs (\(service.leaderboard.count) entries)")
+                Text("Firestore: routeLeaderboards/\(routeKey)/runs (\(service.leaderboard.count) entries)")
             }
         }
         .navigationTitle(routeName)

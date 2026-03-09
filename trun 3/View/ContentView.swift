@@ -50,29 +50,19 @@ struct ContentView: View {
     @State var routes: [String: [Route]] = ContentView.loadInitialRoutes()
 
     private static let defaultRoutes: [Route] = [
-        Route(id: 0, name: "3 mile red", GPXFileURL: "3_miles_red", color: [1, 0, 0]),
-        Route(id: 1, name: "6 mile red", GPXFileURL: "6_miles_red", color: [1, 0, 0]),
-        Route(id: 2, name: "10 mile red", GPXFileURL: "10_miles_red", color: [1, 0, 0]),
-        Route(id: 3, name: "3 mile gold", GPXFileURL: "3_miles_gold", color: [1, 1, 0]),
-        Route(id: 4, name: "6 mile gold", GPXFileURL: "6_miles_gold", color: [1, 1, 0]),
-        Route(id: 5, name: "10 mile gold", GPXFileURL: "10_miles_gold", color: [1, 1, 0]),
-        Route(id: 6, name: "3 mile green", GPXFileURL: "3_miles_green", color: [0, 1, 0]),
-        Route(id: 7, name: "6 mile green", GPXFileURL: "6_miles_green", color: [0, 1, 0]),
-        Route(id: 8, name: "10 mile green", GPXFileURL: "10_miles_green", color: [0, 1, 0]),
-        Route(id: 9, name: "8 mile new", GPXFileURL: "8_miles_new", color: [1, 0.647, 0])
+//        Route(id: 0, name: "3 mile red", GPXFileURL: "3_miles_red", color: [1, 0, 0]),
+//        Route(id: 1, name: "6 mile red", GPXFileURL: "6_miles_red", color: [1, 0, 0]),
+//        Route(id: 2, name: "10 mile red", GPXFileURL: "10_miles_red", color: [1, 0, 0]),
+//        Route(id: 3, name: "3 mile gold", GPXFileURL: "3_miles_gold", color: [1, 1, 0]),
+//        Route(id: 4, name: "6 mile gold", GPXFileURL: "6_miles_gold", color: [1, 1, 0]),
+//        Route(id: 5, name: "10 mile gold", GPXFileURL: "10_miles_gold", color: [1, 1, 0]),
+//        Route(id: 6, name: "3 mile green", GPXFileURL: "3_miles_green", color: [0, 1, 0]),
+//        Route(id: 7, name: "6 mile green", GPXFileURL: "6_miles_green", color: [0, 1, 0]),
+//        Route(id: 8, name: "10 mile green", GPXFileURL: "10_miles_green", color: [0, 1, 0]),
+//        Route(id: 9, name: "8 mile new", GPXFileURL: "8_miles_new", color: [1, 0.647, 0])
     ]
 
     private static func loadInitialRoutes() -> [String: [Route]] {
-        if var saved = RouteStorageService.loadRoutes() {
-            let existingIds = Set(saved["Run Detroit"]?.map { $0.id } ?? [])
-            let missingDefaults = defaultRoutes.filter { !existingIds.contains($0.id) }
-            if saved["Run Detroit"] != nil {
-                saved["Run Detroit"]?.insert(contentsOf: missingDefaults, at: 0)
-            } else {
-                saved["Run Detroit"] = defaultRoutes
-            }
-            return saved
-        }
         return ["Run Detroit": defaultRoutes]
     }
     
@@ -105,6 +95,7 @@ struct ContentView: View {
     @State private var gpxDocument: GPXDocument?
     @State private var showRouteGenerator = false
     @State private var showProfile = false
+    @State private var cachedRouteCoords: [CLLocationCoordinate2D]? = nil
     @StateObject private var profileService = ProfileService()
     
     // We can use the LocationManager from the view model if it's accessible,
@@ -123,8 +114,8 @@ struct ContentView: View {
                 Map(position: $viewModel.regionView) {
                     UserAnnotation()
                     
-                    if let route = selectedRoute,
-                       let coords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL),
+                    if selectedRoute != nil,
+                       let coords = cachedRouteCoords,
                        !coords.isEmpty {
                         // Rainbow route segments
                         ForEach(RouteAnnotationHelpers.rainbowSegments(from: coords)) { segment in
@@ -191,6 +182,12 @@ struct ContentView: View {
                 }
                 .onChange(of: selectedRoute) { _ in
                     viewModel.centerOnUser()
+                    // Recompute cached route coordinates
+                    if let route = selectedRoute {
+                        cachedRouteCoords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL)
+                    } else {
+                        cachedRouteCoords = nil
+                    }
                     // Keep the sheet expanded when selecting a route from the list
                     if runningMenuHeight == .large {
                         DispatchQueue.main.async {
@@ -380,15 +377,13 @@ struct ContentView: View {
                                                                 .cornerRadius(6)
                                                         }
 
-                                                        // Remove from map (only for non-built-in routes, id >= 10)
-                                                        if route.id >= 10 {
-                                                            Button(action: {
-                                                                removeRouteFromList(route)
-                                                            }) {
-                                                                Image(systemName: "xmark.circle.fill")
-                                                                    .font(.body)
-                                                                    .foregroundColor(.secondary)
-                                                            }
+                                                        // Remove route from list
+                                                        Button(action: {
+                                                            removeRouteFromList(route)
+                                                        }) {
+                                                            Image(systemName: "xmark.circle.fill")
+                                                                .font(.body)
+                                                                .foregroundColor(.secondary)
                                                         }
                                                     }
                                                     .padding(.horizontal, 12)
@@ -425,6 +420,7 @@ struct ContentView: View {
                                     RouteLeaderboardView(
                                         routeID: route.id,
                                         routeName: route.name,
+                                        sharedRouteID: route.sharedRouteID,
                                         liveRunners: liveRunService.liveRunners,
                                         isRunning: inRunningMode
                                     )

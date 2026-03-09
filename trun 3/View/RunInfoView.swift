@@ -12,6 +12,73 @@ import AVFoundation
 import UIKit
 import Photos
 import UniformTypeIdentifiers
+import HealthKit
+
+extension HKWorkoutActivityType {
+    var name: String {
+        switch self {
+        case .americanFootball: return "American Football"
+        case .basketball: return "Basketball"
+        case .cycling: return "Cycling"
+        case .running: return "Running"
+        case .soccer: return "Soccer"
+        case .swimming: return "Swimming"
+        case .walking: return "Walking"
+        // Add other cases as needed
+        case .other: return "Other"
+        @unknown default: return "Unknown"
+        }
+    }
+}
+
+struct HoldToConfirmButton<Label: View>: View {
+    let duration: Double
+    let size: CGFloat
+    let lineWidth: CGFloat
+    let backgroundColor: Color
+    let progressColor: Color
+    let onComplete: () -> Void
+    @ViewBuilder var label: () -> Label
+
+    @State private var isPressing = false
+    @State private var progress: CGFloat = 0
+
+    var body: some View {
+        ZStack {
+            // Background ring
+            Circle()
+                .stroke(backgroundColor, lineWidth: lineWidth)
+                .frame(width: size, height: size)
+
+            // Progress ring
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(progressColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: size, height: size)
+                .animation(.linear(duration: isPressing ? duration : 0.2), value: progress)
+
+            // Center content
+            label()
+        }
+        .contentShape(Circle())
+        .onLongPressGesture(minimumDuration: duration, maximumDistance: 44, pressing: { pressing in
+            if pressing {
+                isPressing = true
+                progress = 1.0
+            } else {
+                // Cancelled early
+                isPressing = false
+                progress = 0.0
+            }
+        }, perform: {
+            // Completed hold
+            isPressing = false
+            progress = 0.0
+            onComplete()
+        })
+    }
+}
 
 struct RunInfoView: View {
     @Environment(\.modelContext) private var modelContext
@@ -55,6 +122,9 @@ struct RunInfoView: View {
 
     @StateObject private var stravaUploadService = StravaUploadService()
     @ObservedObject private var stravaAuth = StravaAuthService.shared
+    
+    @State var activityTypeArray: [HKWorkoutActivityType] = [.running, .walking, .cycling]
+    @State var activityTypeSelected = HKWorkoutActivityType.running
 
     var body: some View {
         let twoDecimalPlaceRun = String(format: "%.2f", locationManager.convertToMiles())
@@ -221,52 +291,64 @@ struct RunInfoView: View {
                             .padding(.vertical, 8)
                     }
                 }
+                VStack {
+                    HStack {
+                        // Search Button
+                        if !searchWasClicked {
+                            Button(action: {
+                                runningMenuHeight = .large
+                                searchWasClicked = true
+                                isSearchFieldFocused = true
+                            }) {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.title2)
+                                    .padding()
+                                    .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                            }
+                        }
 
-                HStack {
-                    // Search Button
-                    if !searchWasClicked {
+                        Spacer()
+
+                        // START BUTTON
                         Button(action: {
-                            runningMenuHeight = .large
-                            searchWasClicked = true
-                            isSearchFieldFocused = true
+                            startRun()
                         }) {
-                            Image(systemName: "magnifyingglass")
+                            ZStack {
+                                Circle()
+                                    .fill(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 80, height: 80)
+                                    .shadow(color: .green.opacity(0.4), radius: 10, x: 0, y: 5)
+
+                                Text("GO")
+                                    .font(.system(.title, design: .rounded).bold())
+                                    .foregroundColor(.white)
+                            }
+                        }
+
+                        Spacer()
+
+                        // Location Button
+                        Button(action: {
+                            withAnimation { region.centerOnUser() }
+                        }) {
+                            Image(systemName: "location.fill")
                                 .font(.title2)
+                                .foregroundColor(.blue)
                                 .padding()
                                 .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
                         }
                     }
+                    .padding()
+                    
+//                    Spacer()
 
-                    Spacer()
-
-                    // START BUTTON
-                    Button(action: {
-                        startRun()
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 80, height: 80)
-                                .shadow(color: .green.opacity(0.4), radius: 10, x: 0, y: 5)
-
-                            Text("GO")
-                                .font(.system(.title, design: .rounded).bold())
-                                .foregroundColor(.white)
+                    Picker("Select an option", selection: $activityTypeSelected) {
+                        ForEach(activityTypeArray, id: \.self) { option in
+                            Text(option.name).tag(option).padding()
                         }
                     }
-
-                    Spacer()
-
-                    // Location Button
-                    Button(action: {
-                        withAnimation { region.centerOnUser() }
-                    }) {
-                        Image(systemName: "location.fill")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                            .padding()
-                            .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
-                    }
+                    .pickerStyle(.segmented)
+                    .padding()
                 }
                 .padding(.horizontal)
 
@@ -320,27 +402,33 @@ struct RunInfoView: View {
 
                     // Pause / Resume / Stop Logic
                     if runSession.isPaused {
-                        // LONG PRESS TO STOP
-                        Button(action: {}) {
-                            ZStack {
-                                Circle()
-                                    .stroke(Color.red, lineWidth: 4)
-                                    .frame(width: 80, height: 80)
-
+                        // HOLD TO STOP with circular progress
+                        HoldToConfirmButton(
+                            duration: cancelTimer,
+                            size: 80,
+                            lineWidth: 6,
+                            backgroundColor: Color.red.opacity(0.25),
+                            progressColor: .red,
+                            onComplete: {
+                                finishRun(minute: minute, seconds: seconds)
+                                generator.selectionChanged()
+                            },
+                            label: {
                                 Circle()
                                     .fill(Color.red)
                                     .frame(width: 60, height: 60)
-
-                                Text("HOLD\nSTOP")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .multilineTextAlignment(.center)
-                                    .foregroundColor(.white)
+                                    .overlay(
+                                        VStack(spacing: 2) {
+                                            Text("HOLD")
+                                                .font(.caption2).bold()
+                                                .foregroundColor(.white)
+                                            Text("STOP")
+                                                .font(.caption2).bold()
+                                                .foregroundColor(.white)
+                                        }
+                                    )
                             }
-                        }
-                        .simultaneousGesture(LongPressGesture(minimumDuration: cancelTimer).onEnded { _ in
-                            finishRun(minute: minute, seconds: seconds)
-                        })
+                        )
 
                         // RESUME BUTTON
                         Button(action: {
@@ -499,7 +587,7 @@ struct RunInfoView: View {
         inRunningMode = true
         locationManager.distance = 0
         locationManager.startTracking()
-        locationManager.startRecording()
+//        locationManager.startRecording()
         runSession.isTimerPaused = false
         runSession.isPaused = false
         runSession.currentTimer = 0
@@ -530,7 +618,7 @@ struct RunInfoView: View {
         }
 
         // Capture TCX data before stopping tracking (which resets location state)
-        locationManager.stopRecording()
+//        locationManager.stopRecording()
         let elapsedSeconds = Double(minute) * 60.0 + (Double(seconds) ?? 0)
         let distanceMeters = locationManager.distance
         let tcx = locationManager.createTCXString(totalTimeSeconds: elapsedSeconds, distanceMeters: distanceMeters)
@@ -571,15 +659,16 @@ struct RunInfoView: View {
             startTime: runSession.runData.startTime,
             endTime: Date(),
             distanceInMiles: runSession.prevRunDistance,
-            calories: 0
+            calories: 0,
+            activityType: activityTypeSelected,
         ) { success, error in
             if success { print("Run saved to HealthKit!") }
         }
 
-        // Save to route leaderboard in Firestore (only if a route was selected and completed)
-        if let route = selectedRoute, runSession.routeCompleted {
+        // Save to route leaderboard in Firestore (only if a route was selected, completed, and has a shared ID)
+        if let route = selectedRoute, runSession.routeCompleted, let sharedID = route.sharedRouteID {
             RouteLeaderboardService().saveCompletedRun(
-                routeID: route.id,
+                sharedRouteID: sharedID,
                 time: runSession.runData.time,
                 distance: runSession.prevRunDistance,
                 pace: runSession.prevRunMinPerMile,
@@ -625,7 +714,8 @@ struct RunInfoView: View {
                     id: maxId + 1,
                     name: sharedRoute.name,
                     GPXFileURL: fileURL.path,
-                    color: [0.0, 0.5, 1.0]
+                    color: [0.0, 0.5, 1.0],
+                    sharedRouteID: sharedRoute.id
                 )
 
                 DispatchQueue.main.async {
@@ -664,21 +754,11 @@ struct RunInfoView: View {
     }
 
     private func uploadUserRun() async {
-        modelContext.insert(runSession.runData)
-        do {
-            try modelContext.save()
-            await MainActor.run {
-                clearRunInformation()
-                // Create a fresh Run for the next session
-                runSession.runData = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
-            }
-        } catch {
-            print("Error saving run: \(error)")
-            await MainActor.run {
-                showAlert = true
-                alertTitle = "Error"
-                alertDetails = "Failed to save run: \(error.localizedDescription)"
-            }
+        await MainActor.run {
+            clearRunInformation()
+            // Create a fresh Run for the next session
+            runSession.runData = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
         }
     }
 }
+

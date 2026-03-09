@@ -51,11 +51,12 @@ class HealthStore: ObservableObject {
         healthStore.execute(query)
     }
     
-    func saveRun(startTime: Date, endTime: Date, distanceInMiles: Double, calories: Double, completion: @escaping (Bool, Error?) -> Void) {
+    func saveRun(startTime: Date, endTime: Date, distanceInMiles: Double, calories: Double, activityType: HKWorkoutActivityType, completion: @escaping (Bool, Error?) -> Void) {
         
         // 1. Create the workout configuration
         let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .running
+//        configuration.activityType = .running
+        configuration.activityType = activityType
         configuration.locationType = .outdoor
         
         // 2. Create the builder

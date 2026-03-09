@@ -9,13 +9,13 @@ import CoreLocation
 import SwiftUI
 
 struct DirectionalArrow: Identifiable {
-    let id = UUID()
+    let id: Int
     let coordinate: CLLocationCoordinate2D
     let bearing: Double
 }
 
 struct RainbowSegment: Identifiable {
-    let id = UUID()
+    let id: Int
     let coordinates: [CLLocationCoordinate2D]
     let color: Color
 }
@@ -40,7 +40,7 @@ enum RouteAnnotationHelpers {
 
             let slice = Array(coords[startIdx..<endIdx])
             if slice.count >= 2 {
-                segments.append(RainbowSegment(coordinates: slice, color: rainbowColors[i]))
+                segments.append(RainbowSegment(id: i, coordinates: slice, color: rainbowColors[i]))
             }
         }
 
@@ -59,15 +59,17 @@ enum RouteAnnotationHelpers {
     }
 
     /// Generate arrows every `intervalMiles` (default 0.1 mi), including one at the start.
-    static func generateArrows(from coords: [CLLocationCoordinate2D], intervalMiles: Double = 0.1) -> [DirectionalArrow] {
+    static func generateArrows(from coords: [CLLocationCoordinate2D], intervalMiles: Double = 0.3) -> [DirectionalArrow] {
         guard coords.count >= 2 else { return [] }
 
         let intervalMeters = intervalMiles * 1609.34
         var arrows: [DirectionalArrow] = []
 
         // Arrow at the beginning
+        var arrowIndex = 0
         let startBearing = bearing(from: coords[0], to: coords[1])
-        arrows.append(DirectionalArrow(coordinate: coords[0], bearing: startBearing))
+        arrows.append(DirectionalArrow(id: arrowIndex, coordinate: coords[0], bearing: startBearing))
+        arrowIndex += 1
 
         var distanceSinceLastArrow: Double = 0
 
@@ -78,7 +80,8 @@ enum RouteAnnotationHelpers {
 
             if distanceSinceLastArrow >= intervalMeters && i < coords.count - 1 {
                 let b = bearing(from: coords[i], to: coords[i + 1])
-                arrows.append(DirectionalArrow(coordinate: coords[i], bearing: b))
+                arrows.append(DirectionalArrow(id: arrowIndex, coordinate: coords[i], bearing: b))
+                arrowIndex += 1
                 distanceSinceLastArrow = 0
             }
         }

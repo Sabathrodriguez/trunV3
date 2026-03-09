@@ -144,7 +144,8 @@ struct SharedRouteLibraryView: View {
                     id: maxId + 1,
                     name: sharedRoute.name,
                     GPXFileURL: fileURL.path,
-                    color: [0.0, 0.5, 1.0]
+                    color: [0.0, 0.5, 1.0],
+                    sharedRouteID: sharedRoute.id
                 )
 
                 DispatchQueue.main.async {

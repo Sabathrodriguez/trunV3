@@ -147,8 +147,8 @@ struct ProfileView: View {
                 showDBInspector = true
             }) {
                 HStack {
-                    Image(systemName: "cylinder.split.1x2")
-                    Text("Database Routes")
+                    Image(systemName: "map")
+                    Text("See all TrunRun routes!")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
