@@ -89,6 +89,7 @@ struct ContentView: View {
     @State private var pendingGPXString = ""
     @State private var pendingCoords: [CLLocationCoordinate2D] = []
     @State private var pendingDistance: Double = 0
+    @State private var isProcessingGPX = false
     @State private var isUploadImporterPresented = false
     @State private var isFileImporterPresented = false
     @State private var isFileExporterPresented = false
@@ -499,17 +500,24 @@ struct ContentView: View {
                                     Button(action: {
                                         if locationManager.isRecording {
                                             locationManager.stopRecording()
-                                            let gpxString = locationManager.createGPXString()
-                                            gpxDocument = GPXDocument(text: gpxString)
-                                            isFileExporterPresented = true
+                                            isProcessingGPX = true
 
-                                            // Store pending data and prompt for name
-                                            if !gpxString.isEmpty {
-                                                pendingGPXString = gpxString
-                                                pendingCoords = GPXParser().parse(gpxString: gpxString)
-                                                pendingDistance = locationManager.convertToMiles()
-                                                routeName = ""
-                                                showRouteNamePrompt = true
+                                            Task {
+                                                let gpxString = locationManager.createGPXString()
+                                                let coords = GPXParser().parse(gpxString: gpxString)
+                                                let distance = locationManager.convertToMiles()
+
+                                                await MainActor.run {
+                                                    if !gpxString.isEmpty {
+                                                        pendingGPXString = gpxString
+                                                        pendingCoords = coords
+                                                        pendingDistance = distance
+                                                        routeName = ""
+                                                    }
+                                                    gpxDocument = GPXDocument(text: gpxString)
+                                                    isProcessingGPX = false
+                                                    isFileExporterPresented = true
+                                                }
                                             }
                                         } else {
                                             locationManager.startRecording()
@@ -564,7 +572,10 @@ struct ContentView: View {
                         contentType: UTType(filenameExtension: "gpx") ?? .xml,
                         defaultFilename: "MyRun.gpx"
                     ) { result in
-                         // handle result
+                        // After file export completes (saved or cancelled), prompt for route name
+                        if !pendingGPXString.isEmpty {
+                            // showRouteNamePrompt = true
+                        }
                     }
                     .alert("Name Your Route", isPresented: $showRouteNamePrompt) {
                         TextField("Route name", text: $routeName)
@@ -594,6 +605,25 @@ struct ContentView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(alertDetails)
+            }
+            .overlay {
+                if isProcessingGPX {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+                            Text("Processing your run...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+                        .padding(32)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(16)
+                    }
+                }
             }
         }
 
