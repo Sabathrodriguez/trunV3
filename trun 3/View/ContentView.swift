@@ -42,6 +42,7 @@ struct ContentView: View {
         
     @ObservedObject public var loginManager: LoginManager
     @StateObject var liveRunService = LiveRunService()
+    @StateObject private var uploadService = SharedRouteService()
     @StateObject var runSession = RunSessionManager()
     @State var inRunningMode: Bool = false
 
@@ -582,7 +583,7 @@ struct ContentView: View {
                         Button("Share") {
                             let sanitized = GPXValidator.sanitizeRouteName(routeName)
                             let name = sanitized.isEmpty ? "My Route" : sanitized
-                            SharedRouteService().publishRoute(
+                            uploadService.publishRoute(
                                 name: name,
                                 gpxString: pendingGPXString,
                                 distanceMiles: pendingDistance,

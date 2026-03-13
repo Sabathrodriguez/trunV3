@@ -1,0 +1,21 @@
+BEGIN:VCALENDAR
+PRODID:-//Lyrahealth//Lyrahealth Event Calendar//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+DTSTAMP:20260312T004114Z
+DTSTART:20260317T130000Z
+DTEND:20260317T135000Z
+SUMMARY:Appointment with Siedah Spencer-Ardis
+TZID:America/Detroit
+UID:20260312T004114Z-uidGen@fe80:0:0:0:8f4:98ff:fe66:8501%ens5
+DESCRIPTION:Title: Video session with Siedah Spencer-Ardis\nLocation: Siedah Spencer-Ardis will provide you with details for connecting over live video.\n\nFor any questions or availability changes contact us at (833)824-1904.\nIf you haven’t checked into your video session 10 minutes past your scheduled time\, Siedah Spencer-Ardis will give you a call to ensure you aren’t running into any technical roadblocks.\n
+LOCATION:
+STATUS:CONFIRMED
+BEGIN:VALARM
+TRIGGER:-PT60M
+ACTION:DISPLAY
+DESCRIPTION:Meeting in 60 minutes
+END:VALARM
+END:VEVENT
+END:VCALENDAR

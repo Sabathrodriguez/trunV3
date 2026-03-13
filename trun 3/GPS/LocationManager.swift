@@ -17,10 +17,14 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     @Published var heading: CLHeading?
     
-    // Recording properties
+    // Recording properties (for route recording)
     @Published var isRecording: Bool = false
     private var recordedLocations: [CLLocation] = []
     private var recordingTimer: Timer?
+
+    // Run tracking properties (for Strava export)
+    private var isRunActive: Bool = false
+    private(set) var runLocations: [CLLocation] = []
 
     override init() {
         super.init()
@@ -60,6 +64,11 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         if delta > locationManager.distanceFilter {
             distance += delta
             previousLocation = location // <--- MOVE THIS INSIDE THE IF BLOCK
+
+            // Capture location for run export (Strava)
+            if isRunActive {
+                runLocations.append(location)
+            }
         }
     }
     
@@ -91,6 +100,17 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         return distance * 0.000621371
     }
     
+    // MARK: - Run Tracking (for Strava export)
+
+    func startRunTracking() {
+        runLocations = []
+        isRunActive = true
+    }
+
+    func stopRunTracking() {
+        isRunActive = false
+    }
+
     // MARK: - GPX Recording
     
     func startRecording() {
@@ -125,27 +145,27 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     func createTCXString(totalTimeSeconds: Double, distanceMeters: Double) -> String {
         let dateFormatter = ISO8601DateFormatter()
 
-        guard let firstLoc = recordedLocations.first else { return "" }
+        guard let firstLoc = runLocations.first else { return "" }
         let startTime = dateFormatter.string(from: firstLoc.timestamp)
 
         var tcx = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
-          <Activities>
-            <Activity Sport="Running">
-              <Id>\(startTime)</Id>
-              <Lap StartTime="\(startTime)">
-                <TotalTimeSeconds>\(totalTimeSeconds)</TotalTimeSeconds>
-                <DistanceMeters>\(distanceMeters)</DistanceMeters>
-                <Intensity>Active</Intensity>
-                <TriggerMethod>Manual</TriggerMethod>
-                <Track>
-        """
+<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+  <Activities>
+    <Activity Sport="Running">
+      <Id>\(startTime)</Id>
+      <Lap StartTime="\(startTime)">
+        <TotalTimeSeconds>\(totalTimeSeconds)</TotalTimeSeconds>
+        <DistanceMeters>\(distanceMeters)</DistanceMeters>
+        <Intensity>Active</Intensity>
+        <TriggerMethod>Manual</TriggerMethod>
+        <Track>
+"""
 
         var cumulativeDistance = 0.0
         var previousLoc: CLLocation?
 
-        for loc in recordedLocations {
+        for loc in runLocations {
             if let prev = previousLoc {
                 cumulativeDistance += loc.distance(from: prev)
             }
@@ -157,27 +177,25 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             let alt = loc.altitude
 
             tcx += """
-
-                  <Trackpoint>
-                    <Time>\(time)</Time>
-                    <Position>
-                      <LatitudeDegrees>\(lat)</LatitudeDegrees>
-                      <LongitudeDegrees>\(lon)</LongitudeDegrees>
-                    </Position>
-                    <AltitudeMeters>\(alt)</AltitudeMeters>
-                    <DistanceMeters>\(cumulativeDistance)</DistanceMeters>
-                  </Trackpoint>
-            """
+          <Trackpoint>
+            <Time>\(time)</Time>
+            <Position>
+              <LatitudeDegrees>\(lat)</LatitudeDegrees>
+              <LongitudeDegrees>\(lon)</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>\(alt)</AltitudeMeters>
+            <DistanceMeters>\(cumulativeDistance)</DistanceMeters>
+          </Trackpoint>
+"""
         }
 
         tcx += """
-
-                </Track>
-              </Lap>
-            </Activity>
-          </Activities>
-        </TrainingCenterDatabase>
-        """
+        </Track>
+      </Lap>
+    </Activity>
+  </Activities>
+</TrainingCenterDatabase>
+"""
 
         return tcx
     }

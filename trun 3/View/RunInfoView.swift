@@ -587,7 +587,7 @@ struct RunInfoView: View {
         inRunningMode = true
         locationManager.distance = 0
         locationManager.startTracking()
-//        locationManager.startRecording()
+        locationManager.startRunTracking()
         runSession.isTimerPaused = false
         runSession.isPaused = false
         runSession.currentTimer = 0
@@ -618,7 +618,7 @@ struct RunInfoView: View {
         }
 
         // Capture TCX data before stopping tracking (which resets location state)
-//        locationManager.stopRecording()
+        locationManager.stopRunTracking()
         let elapsedSeconds = Double(minute) * 60.0 + (Double(seconds) ?? 0)
         let distanceMeters = locationManager.distance
         let tcx = locationManager.createTCXString(totalTimeSeconds: elapsedSeconds, distanceMeters: distanceMeters)
