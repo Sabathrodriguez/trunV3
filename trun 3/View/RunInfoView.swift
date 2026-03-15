@@ -340,7 +340,6 @@ struct RunInfoView: View {
                     }
                     .padding()
                     
-//                    Spacer()
 
                     Picker("Select an option", selection: $activityTypeSelected) {
                         ForEach(activityTypeArray, id: \.self) { option in
@@ -348,7 +347,7 @@ struct RunInfoView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .padding()
+                    .padding()                    
                 }
                 .padding(.horizontal)
 
@@ -502,8 +501,11 @@ struct RunInfoView: View {
                 }
             }
         }
-        .alert(isPresented: $showAlert) {
-            Alert(title: Text(alertTitle), message: Text(alertDetails), dismissButton: .default(Text("OK")))
+        .onChange(of: showAlert) { newValue in
+            if !newValue && runSession.isSaving {
+                clearRunInformation()
+                runSession.runData = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
+            }
         }
         .sheet(isPresented: $isImagePickerPresented) {
             ImagePicker(sourceType: .camera) { image in
@@ -651,10 +653,6 @@ struct RunInfoView: View {
         runSession.runData.time = Double(runSession.prevRunMinute) + (Double(runSession.prevRunSecond) ?? 0)/60
         runSession.runData.dateString = dateFormatter.string(from: runSession.currentDate)
 
-        Task {
-            await uploadUserRun()
-        }
-
         healthStore.saveRun(
             startTime: runSession.runData.startTime,
             endTime: Date(),
@@ -662,7 +660,18 @@ struct RunInfoView: View {
             calories: 0,
             activityType: activityTypeSelected,
         ) { success, error in
-            if success { print("Run saved to HealthKit!") }
+            if success {
+                self.showAlert = true
+                self.alertTitle = "Saved!"
+                self.alertDetails = "Your workout was saved to Apple Health."
+                self.healthStore.fetchWeeklyDistances { distances in
+                    self.healthStore.weeklyDistances = distances
+                }
+            } else {
+                self.showAlert = true
+                self.alertTitle = "Save Failed"
+                self.alertDetails = "Could not save to Apple Health. Please try again."
+            }
         }
 
         // Save to route leaderboard in Firestore (only if a route was selected, completed, and has a shared ID)
@@ -753,12 +762,5 @@ struct RunInfoView: View {
         return String(format: "%d:%02d", wholeMinutes, seconds)
     }
 
-    private func uploadUserRun() async {
-        await MainActor.run {
-            clearRunInformation()
-            // Create a fresh Run for the next session
-            runSession.runData = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
-        }
-    }
 }
 

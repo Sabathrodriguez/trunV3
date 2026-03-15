@@ -13,8 +13,10 @@
 			</array>
 		</dict>
 	</array>
-	<key>NShealth</key>
-	<string></string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>trun uses your workout data to show your weekly running, cycling, and walking miles.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>trun saves your workouts to Apple Health so you can track your activity.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

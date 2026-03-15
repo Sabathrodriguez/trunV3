@@ -50,18 +50,7 @@ struct ContentView: View {
     
     @State var routes: [String: [Route]] = ContentView.loadInitialRoutes()
 
-    private static let defaultRoutes: [Route] = [
-//        Route(id: 0, name: "3 mile red", GPXFileURL: "3_miles_red", color: [1, 0, 0]),
-//        Route(id: 1, name: "6 mile red", GPXFileURL: "6_miles_red", color: [1, 0, 0]),
-//        Route(id: 2, name: "10 mile red", GPXFileURL: "10_miles_red", color: [1, 0, 0]),
-//        Route(id: 3, name: "3 mile gold", GPXFileURL: "3_miles_gold", color: [1, 1, 0]),
-//        Route(id: 4, name: "6 mile gold", GPXFileURL: "6_miles_gold", color: [1, 1, 0]),
-//        Route(id: 5, name: "10 mile gold", GPXFileURL: "10_miles_gold", color: [1, 1, 0]),
-//        Route(id: 6, name: "3 mile green", GPXFileURL: "3_miles_green", color: [0, 1, 0]),
-//        Route(id: 7, name: "6 mile green", GPXFileURL: "6_miles_green", color: [0, 1, 0]),
-//        Route(id: 8, name: "10 mile green", GPXFileURL: "10_miles_green", color: [0, 1, 0]),
-//        Route(id: 9, name: "8 mile new", GPXFileURL: "8_miles_new", color: [1, 0.647, 0])
-    ]
+    private static let defaultRoutes: [Route] = []
 
     private static func loadInitialRoutes() -> [String: [Route]] {
         return ["Run Detroit": defaultRoutes]
@@ -106,7 +95,6 @@ struct ContentView: View {
     @StateObject var locationManager = LocationManager()
     
     @StateObject var viewModel: UserLocation = UserLocation()
-//    @State var cameraPosition: MapCameraPosition = .userLocation(followsHeading: true, fallback: .automatic)
     
     var runningMenuHeights = Set([PresentationDetent.height(250), PresentationDetent.height(100), PresentationDetent.large])
     
@@ -179,8 +167,10 @@ struct ContentView: View {
                 }
                 .onAppear {
                     viewModel.checkIfLocationServicesEnabled()
-                    requestHealthKitAccess()
                     profileService.fetchProfileImageURL()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        requestHealthKitAccess()
+                    }
                 }
                 .onChange(of: selectedRoute) { _ in
                     viewModel.centerOnUser()
@@ -266,13 +256,7 @@ struct ContentView: View {
                             .background(.ultraThinMaterial)
                             .ignoresSafeArea()
                         
-                        VStack(spacing: 20) {
-                            
-//                            // Drag Indicator
-//                            Capsule()
-//                                .frame(width: 40, height: 4)
-//                                .foregroundColor(.gray.opacity(0.5))
-//                                .padding(.top, 10)
+                        VStack(spacing: 20) {                    
 
                             RunView(
                                 selectedRun: $selectedRun,
@@ -305,70 +289,37 @@ struct ContentView: View {
                                 } else if showDBInspector {
                                     DatabaseInspectorView(isPresented: $showDBInspector)
                                 } else {
-                                ScrollView(.vertical, showsIndicators: true) {
-                                VStack(spacing: 16) {
+                                    ScrollView(.vertical, showsIndicators: true) {
+                                        VStack(spacing: 16) {
+
+                                            WeeklyActivityView(
+                                            runMiles: healthStore.weeklyDistances[.running] ?? 0,
+                                            cycleMiles: healthStore.weeklyDistances[.cycling] ?? 0,
+                                            walkMiles: healthStore.weeklyDistances[.walking] ?? 0
+                                        )
+                    .padding(.bottom, 4)
                                 // MY ROUTES
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("My Routes")
-                                        .font(.headline)
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Text("My Routes")
+                                            .font(.headline)
 
-                                    if let routeList = routes["Run Detroit"], !routeList.isEmpty {
-                                        ScrollView(.vertical, showsIndicators: false) {
-                                            VStack(spacing: 6) {
-                                                // NO ROUTE option
-                                                HStack {
-                                                    Circle()
-                                                        .fill(Color.gray)
-                                                        .frame(width: 12, height: 12)
-
-                                                    Text("No Route")
-                                                        .font(.subheadline)
-                                                        .fontWeight(selectedRoute == nil ? .bold : .regular)
-                                                        .lineLimit(1)
-
-                                                    Spacer()
-
-                                                    if selectedRoute == nil {
-                                                        Text("Active")
-                                                            .font(.caption2)
-                                                            .fontWeight(.bold)
-                                                            .foregroundColor(.green)
-                                                            .padding(.horizontal, 8)
-                                                            .padding(.vertical, 3)
-                                                            .background(Color.green.opacity(0.15))
-                                                            .cornerRadius(6)
-                                                    }
-                                                }
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 8)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 10)
-                                                        .fill(selectedRoute == nil ? Color.blue.opacity(0.1) : Color.clear)
-                                                        .overlay(
-                                                            RoundedRectangle(cornerRadius: 10)
-                                                                .stroke(selectedRoute == nil ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
-                                                        )
-                                                )
-                                                .contentShape(Rectangle())
-                                                .onTapGesture {
-                                                    selectedRoute = nil
-                                                }
-
-                                                ForEach(routeList) { route in
+                                        if let routeList = routes["Run Detroit"], !routeList.isEmpty {
+                                            ScrollView(.vertical, showsIndicators: false) {
+                                                VStack(spacing: 6) {
+                                                    // NO ROUTE option
                                                     HStack {
-                                                        // Color dot
                                                         Circle()
-                                                            .fill(Color(red: route.color[0], green: route.color[1], blue: route.color[2]))
+                                                            .fill(Color.gray)
                                                             .frame(width: 12, height: 12)
 
-                                                        Text(route.name)
+                                                        Text("No Route")
                                                             .font(.subheadline)
-                                                            .fontWeight(selectedRoute?.id == route.id ? .bold : .regular)
+                                                            .fontWeight(selectedRoute == nil ? .bold : .regular)
                                                             .lineLimit(1)
 
                                                         Spacer()
 
-                                                        if selectedRoute?.id == route.id {
+                                                        if selectedRoute == nil {
                                                             Text("Active")
                                                                 .font(.caption2)
                                                                 .fontWeight(.bold)
@@ -378,44 +329,84 @@ struct ContentView: View {
                                                                 .background(Color.green.opacity(0.15))
                                                                 .cornerRadius(6)
                                                         }
-
-                                                        // Remove route from list
-                                                        Button(action: {
-                                                            removeRouteFromList(route)
-                                                        }) {
-                                                            Image(systemName: "xmark.circle.fill")
-                                                                .font(.body)
-                                                                .foregroundColor(.secondary)
-                                                        }
                                                     }
                                                     .padding(.horizontal, 12)
                                                     .padding(.vertical, 8)
                                                     .background(
                                                         RoundedRectangle(cornerRadius: 10)
-                                                            .fill(selectedRoute?.id == route.id ? Color.blue.opacity(0.1) : Color.clear)
+                                                            .fill(selectedRoute == nil ? Color.blue.opacity(0.1) : Color.clear)
                                                             .overlay(
                                                                 RoundedRectangle(cornerRadius: 10)
-                                                                    .stroke(selectedRoute?.id == route.id ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
+                                                                    .stroke(selectedRoute == nil ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
                                                             )
                                                     )
                                                     .contentShape(Rectangle())
                                                     .onTapGesture {
-                                                        selectedRoute = route
+                                                        selectedRoute = nil
+                                                    }
+
+                                                    ForEach(routeList) { route in
+                                                        HStack {
+                                                            // Color dot
+                                                            Circle()
+                                                                .fill(Color(red: route.color[0], green: route.color[1], blue: route.color[2]))
+                                                                .frame(width: 12, height: 12)
+
+                                                            Text(route.name)
+                                                                .font(.subheadline)
+                                                                .fontWeight(selectedRoute?.id == route.id ? .bold : .regular)
+                                                                .lineLimit(1)
+
+                                                            Spacer()
+
+                                                            if selectedRoute?.id == route.id {
+                                                                Text("Active")
+                                                                    .font(.caption2)
+                                                                    .fontWeight(.bold)
+                                                                    .foregroundColor(.green)
+                                                                    .padding(.horizontal, 8)
+                                                                    .padding(.vertical, 3)
+                                                                    .background(Color.green.opacity(0.15))
+                                                                    .cornerRadius(6)
+                                                            }
+
+                                                            // Remove route from list
+                                                            Button(action: {
+                                                                removeRouteFromList(route)
+                                                            }) {
+                                                                Image(systemName: "xmark.circle.fill")
+                                                                    .font(.body)
+                                                                    .foregroundColor(.secondary)
+                                                            }
+                                                        }
+                                                        .padding(.horizontal, 12)
+                                                        .padding(.vertical, 8)
+                                                        .background(
+                                                            RoundedRectangle(cornerRadius: 10)
+                                                                .fill(selectedRoute?.id == route.id ? Color.blue.opacity(0.1) : Color.clear)
+                                                                .overlay(
+                                                                    RoundedRectangle(cornerRadius: 10)
+                                                                        .stroke(selectedRoute?.id == route.id ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
+                                                                )
+                                                        )
+                                                        .contentShape(Rectangle())
+                                                        .onTapGesture {
+                                                            selectedRoute = route
+                                                        }
                                                     }
                                                 }
                                             }
+                                        } else {
+                                            Text("No routes added yet")
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 20)
                                         }
-                                    } else {
-                                        Text("No routes added yet")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 20)
                                     }
-                                }
-                                .padding()
-                                .background(Color(UIColor.secondarySystemBackground))
-                                .cornerRadius(16)
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemBackground))
+                                    .cornerRadius(16)
 
                                 // ROUTE LEADERBOARD
                                 if let route = selectedRoute {
@@ -600,12 +591,12 @@ struct ContentView: View {
                     } message: {
                         Text("Give your route a name before sharing it.")
                     }
+                    .alert(alertTitle, isPresented: $showAlert) {
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text(alertDetails)
+                    }
                 }
-            }
-            .alert(alertTitle, isPresented: $showAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(alertDetails)
             }
             .overlay {
                 if isProcessingGPX {
@@ -635,13 +626,12 @@ struct ContentView: View {
                 print("Error getting health kit data: \(error)")
             } else {
                 print("Successfullyretrieved healthkit data")
+                self.healthStore.fetchWeeklyDistances { distances in
+                    self.healthStore.weeklyDistances = distances
+                }
             }
         }
-    }
-    
-    private func getRouteData() {
-        // ... existing code ...
-    }
+    }    
     
     private func uploadGPXToFirestore(from url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }

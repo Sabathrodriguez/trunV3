@@ -8,8 +8,9 @@
 import HealthKit
 
 class HealthStore: ObservableObject {
- 
+
     let healthStore = HKHealthStore()
+    @Published var weeklyDistances: [HKWorkoutActivityType: Double] = [.running: 0, .walking: 0, .cycling: 0]
     
     func requestAuthorization(completion: @escaping (Bool, Error?) -> ()) {
         // 1. Define the types you want to WRITE (Share)
@@ -23,7 +24,8 @@ class HealthStore: ObservableObject {
         let readTypes: Set<HKObjectType> = [
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
-            HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!
+            HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
+            HKObjectType.workoutType()
         ]
         
         // 3. Request authorization
@@ -101,5 +103,52 @@ class HealthStore: ObservableObject {
             }
         }
     }
-    
+
+    func fetchWeeklyDistances(completion: @escaping ([HKWorkoutActivityType: Double]) -> Void) {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) else {
+            completion([:])
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startOfWeek, end: now, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        let query = HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+            var distances: [HKWorkoutActivityType: Double] = [
+                .running: 0,
+                .walking: 0,
+                .cycling: 0
+            ]
+
+            if let error = error {
+                print("[WeeklyDistances] Query error: \(error.localizedDescription)")
+            }
+
+            guard let workouts = samples as? [HKWorkout] else {
+                print("[WeeklyDistances] No workout samples returned")
+                DispatchQueue.main.async { completion(distances) }
+                return
+            }
+
+            print("[WeeklyDistances] Found \(workouts.count) workouts this week")
+
+            for workout in workouts {
+                let type = workout.workoutActivityType
+                print("[WeeklyDistances] Workout: type=\(type.rawValue), totalDistance=\(String(describing: workout.totalDistance))")
+                if let totalDistance = workout.totalDistance {
+                    let miles = totalDistance.doubleValue(for: .mile())
+                    if distances.keys.contains(type) {
+                        distances[type, default: 0] += miles
+                    }
+                }
+            }
+
+            DispatchQueue.main.async { completion(distances) }
+        }
+
+        healthStore.execute(query)
+    }
+
 }

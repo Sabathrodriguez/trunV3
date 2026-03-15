@@ -308,6 +308,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "trun-3-Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to take pictures on your run";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "This data is needed to track your runs for pacing and heart rate";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "I need your health data to store it to healthkit";
@@ -345,6 +346,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "trun-3-Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to take pictures on your run";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "This data is needed to track your runs for pacing and heart rate";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "I need your health data to store it to healthkit";
