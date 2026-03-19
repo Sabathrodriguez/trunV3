@@ -28,7 +28,7 @@ class GoogleRoutesService {
     private var apiKey: String? {
         guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
               let dict = NSDictionary(contentsOfFile: path),
-              let key = "AIzaSyDCx77ckrHkrTnxChiaUOk98JlX7UKNJeI" as? String else {
+              let key = dict["API_KEY"] as? String else {
             return nil
         }
         return key

@@ -6,19 +6,20 @@
 //
 
 import AuthenticationServices
+import FirebaseFunctions
 import Foundation
 
 class StravaAuthService: NSObject, ObservableObject {
     static let shared = StravaAuthService()
 
-    // TODO: Replace with your Strava API application credentials from https://www.strava.com/settings/api
     private let clientID = "205635"
-    private let clientSecret = "2897d73e4acb42a6bad8f8a138a2066f6a137298"
     private let callbackScheme = "trun3strava"
 
     private let keychainAccessToken = "strava_access_token"
     private let keychainRefreshToken = "strava_refresh_token"
     private let keychainExpiresAt = "strava_token_expires_at"
+
+    private lazy var functions = Functions.functions()
 
     @Published var isAuthenticated: Bool = false
 
@@ -68,23 +69,14 @@ class StravaAuthService: NSObject, ObservableObject {
     }
 
     private func exchangeCodeForTokens(code: String) async {
-        let url = URL(string: "https://www.strava.com/oauth/token")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "client_id": clientID,
-            "client_secret": clientSecret,
-            "code": code,
-            "grant_type": "authorization_code"
-        ]
-
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            try parseTokenResponse(data: data)
+            let result = try await functions.httpsCallable("stravaTokenExchange").call(["code": code])
+
+            guard let data = result.data as? [String: Any] else {
+                throw StravaError.invalidResponse
+            }
+
+            try parseTokenData(data)
         } catch {
             print("Strava token exchange error: \(error)")
         }
@@ -106,31 +98,21 @@ class StravaAuthService: NSObject, ObservableObject {
             throw StravaError.notAuthenticated
         }
 
-        let url = URL(string: "https://www.strava.com/oauth/token")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let result = try await functions.httpsCallable("stravaTokenRefresh").call(["refresh_token": refreshToken])
 
-        let body: [String: Any] = [
-            "client_id": clientID,
-            "client_secret": clientSecret,
-            "refresh_token": refreshToken,
-            "grant_type": "refresh_token"
-        ]
+        guard let data = result.data as? [String: Any] else {
+            throw StravaError.invalidResponse
+        }
 
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        let (data, _) = try await URLSession.shared.data(for: request)
-        try parseTokenResponse(data: data)
+        try parseTokenData(data)
     }
 
     // MARK: - Token Parsing & Storage
 
-    private func parseTokenResponse(data: Data) throws {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let accessToken = json["access_token"] as? String,
-              let refreshToken = json["refresh_token"] as? String,
-              let expiresAt = json["expires_at"] as? TimeInterval else {
+    private func parseTokenData(_ data: [String: Any]) throws {
+        guard let accessToken = data["access_token"] as? String,
+              let refreshToken = data["refresh_token"] as? String,
+              let expiresAt = data["expires_at"] as? TimeInterval else {
             throw StravaError.invalidResponse
         }
 

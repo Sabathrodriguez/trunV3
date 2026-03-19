@@ -64,7 +64,13 @@ node_modules/
 
 # dotenv environment variables file
 .env
+.env.*
 
+# API keys and secrets
+Secrets.plist
+**/Secrets.plist
 *.plist
+!firebase.json
+
+# Xcode / Swift
 *.swiftpm
-*firebase*

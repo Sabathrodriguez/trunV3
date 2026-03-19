@@ -12,11 +12,29 @@ import GoogleSignIn
 import FirebaseAuth
 import FirebaseDatabase
 import FirebaseFirestore
+import FirebaseAppCheck
+
+class TrunAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> (any AppCheckProvider)? {
+        return AppAttestProvider(app: app)
+    }
+}
 
 @main
 struct trunApp: App {
     init() {
+        let providerFactory = TrunAppCheckProviderFactory()
+        AppCheck.setAppCheckProviderFactory(providerFactory)
         FirebaseApp.configure()
+
+        // Debug: check if App Check can get a token
+        AppCheck.appCheck().token(forcingRefresh: true) { token, error in
+            if let error = error {
+                print("APP CHECK TOKEN ERROR: \(error)")
+            } else if let token = token {
+                print("APP CHECK TOKEN SUCCESS: \(token.token.prefix(20))...")
+            }
+        }
         
         let settings = Firestore.firestore().settings
 //        settings.host = "localhost/:8080" // Default port for Firestore emulator
