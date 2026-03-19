@@ -20,9 +20,9 @@ struct RunnerAnnotationView: View {
                 .shadow(color: runner.color.opacity(0.6), radius: 4)
 
             // Small pointer triangle
-            Image(systemName: "arrowtriangle.down.fill")
-                .font(.system(size: 6))
-                .foregroundColor(runner.color)
+            // Image(systemName: "arrowtriangle.down.fill")
+            //     .font(.system(size: 6))
+            //     .foregroundColor(runner.color)
         }
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CoreLocation
 
 class RunSessionManager: ObservableObject {
     @Published var runData: Run = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
@@ -20,4 +21,7 @@ class RunSessionManager: ObservableObject {
     @Published var prevRunMinute: Int = 0
     @Published var prevRunSecond: String = ""
     @Published var prevRunMinPerMile: String = "0:00"
+
+    // Captured GPS locations for HealthKit route and Strava export
+    var runLocations: [CLLocation] = []
 }

@@ -14,6 +14,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var authorizationStatus: CLAuthorizationStatus?
     @Published var distance: Double = 0
     private var previousLocation: CLLocation?
+    private let distanceThreshold: Double = 10 // meters — minimum movement to count toward distance
     
     @Published var heading: CLHeading?
     
@@ -51,6 +52,14 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         guard let location = locations.last else { return }
         self.location = location
 
+        // Capture every location for route tracking (HealthKit route + Strava TCX)
+        if isRunActive {
+            runLocations.append(location)
+            if runLocations.count % 10 == 1 {
+                print("[LocationManager] Run location #\(runLocations.count) — accuracy: \(location.horizontalAccuracy)m")
+            }
+        }
+
         // Handle the first location update
         guard let lastLocation = previousLocation else {
             previousLocation = location
@@ -59,16 +68,11 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
         // Check distance from the LAST RECORDED location
         let delta = location.distance(from: lastLocation)
-        
-        // Only update if we moved enough
-        if delta > locationManager.distanceFilter {
-            distance += delta
-            previousLocation = location // <--- MOVE THIS INSIDE THE IF BLOCK
 
-            // Capture location for run export (Strava)
-            if isRunActive {
-                runLocations.append(location)
-            }
+        // Only update distance counter if we moved enough (filters GPS jitter)
+        if delta > distanceThreshold {
+            distance += delta
+            previousLocation = location
         }
     }
     
@@ -105,10 +109,17 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     func startRunTracking() {
         runLocations = []
         isRunActive = true
+        // Remove distance filter so iOS delivers locations at full frequency (~1/sec)
+        // This gives HealthKit and Strava a dense route trace
+        locationManager.distanceFilter = kCLDistanceFilterNone
+        print("[LocationManager] Run tracking started — distanceFilter=\(locationManager.distanceFilter)")
     }
 
     func stopRunTracking() {
         isRunActive = false
+        print("[LocationManager] Run tracking stopped — captured \(runLocations.count) locations")
+        // Restore distance filter for normal map usage (saves battery)
+        locationManager.distanceFilter = 10
     }
 
     // MARK: - GPX Recording

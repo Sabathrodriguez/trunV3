@@ -588,8 +588,8 @@ struct RunInfoView: View {
     func startRun() {
         inRunningMode = true
         locationManager.distance = 0
-        locationManager.startTracking()
         locationManager.startRunTracking()
+        locationManager.startTracking()
         runSession.isTimerPaused = false
         runSession.isPaused = false
         runSession.currentTimer = 0
@@ -619,7 +619,9 @@ struct RunInfoView: View {
             runSession.routeCompleted = false
         }
 
-        // Capture TCX data before stopping tracking (which resets location state)
+        // Capture run locations and TCX data before stopping tracking (which resets location state)
+        runSession.runLocations = locationManager.runLocations
+        print("[RunInfoView] finishRun — captured \(runSession.runLocations.count) locations from LocationManager")
         locationManager.stopRunTracking()
         let elapsedSeconds = Double(minute) * 60.0 + (Double(seconds) ?? 0)
         let distanceMeters = locationManager.distance
@@ -653,12 +655,14 @@ struct RunInfoView: View {
         runSession.runData.time = Double(runSession.prevRunMinute) + (Double(runSession.prevRunSecond) ?? 0)/60
         runSession.runData.dateString = dateFormatter.string(from: runSession.currentDate)
 
+        print("[RunInfoView] saveRunAction — passing \(runSession.runLocations.count) locations to HealthStore")
         healthStore.saveRun(
             startTime: runSession.runData.startTime,
             endTime: Date(),
             distanceInMiles: runSession.prevRunDistance,
             calories: 0,
             activityType: activityTypeSelected,
+            routeLocations: runSession.runLocations
         ) { success, error in
             if success {
                 self.showAlert = true
@@ -750,6 +754,7 @@ struct RunInfoView: View {
         runSession.isRunDone = false
         runSession.routeCompleted = false
         runSession.isSaving = false
+        runSession.runLocations = []
     }
 
     private func calculateMilesPerMinute(distance: Double, time: Double) -> String {
