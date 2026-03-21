@@ -21,6 +21,7 @@ class RunSessionManager: ObservableObject {
     @Published var prevRunMinute: Int = 0
     @Published var prevRunSecond: String = ""
     @Published var prevRunMinPerMile: String = "0:00"
+    @Published var prevRunElevationGain: Double = 0 // meters
 
     // Captured GPS locations for HealthKit route and Strava export
     var runLocations: [CLLocation] = []

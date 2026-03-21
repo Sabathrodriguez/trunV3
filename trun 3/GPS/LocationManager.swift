@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CoreLocation
+import CoreMotion
 
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let locationManager = CLLocationManager()
@@ -26,6 +27,11 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     // Run tracking properties (for Strava export)
     private var isRunActive: Bool = false
     private(set) var runLocations: [CLLocation] = []
+
+    // Elevation tracking (barometric altimeter)
+    private let altimeter = CMAltimeter()
+    @Published var elevationGain: Double = 0 // meters
+    private var lastRelativeAltitude: Double?
 
     override init() {
         super.init()
@@ -109,15 +115,33 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     func startRunTracking() {
         runLocations = []
         isRunActive = true
+        elevationGain = 0
+        lastRelativeAltitude = nil
         // Remove distance filter so iOS delivers locations at full frequency (~1/sec)
         // This gives HealthKit and Strava a dense route trace
         locationManager.distanceFilter = kCLDistanceFilterNone
         print("[LocationManager] Run tracking started — distanceFilter=\(locationManager.distanceFilter)")
+
+        // Start barometric altimeter for accurate elevation tracking
+        if CMAltimeter.isRelativeAltitudeAvailable() {
+            altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
+                guard let self = self, let data = data else { return }
+                let currentAltitude = data.relativeAltitude.doubleValue // meters
+                if let lastAlt = self.lastRelativeAltitude {
+                    let delta = currentAltitude - lastAlt
+                    if delta > 0 {
+                        self.elevationGain += delta
+                    }
+                }
+                self.lastRelativeAltitude = currentAltitude
+            }
+        }
     }
 
     func stopRunTracking() {
         isRunActive = false
-        print("[LocationManager] Run tracking stopped — captured \(runLocations.count) locations")
+        altimeter.stopRelativeAltitudeUpdates()
+        print("[LocationManager] Run tracking stopped — captured \(runLocations.count) locations, elevation gain: \(String(format: "%.1f", elevationGain))m")
         // Restore distance filter for normal map usage (saves battery)
         locationManager.distanceFilter = 10
     }

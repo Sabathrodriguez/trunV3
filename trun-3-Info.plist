@@ -13,6 +13,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSMotionUsageDescription</key>
+	<string>trun uses the barometric altimeter to accurately track elevation gain during your workouts.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>trun uses your workout data to show your weekly running, cycling, and walking miles.</string>
 	<key>NSHealthUpdateUsageDescription</key>

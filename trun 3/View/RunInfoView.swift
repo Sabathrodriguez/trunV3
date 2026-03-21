@@ -139,7 +139,8 @@ struct RunInfoView: View {
                     VStack(spacing: 15) {
                         SummaryRow(icon: "map.fill", title: "Distance", value: String(format: "%.2f mi", runSession.prevRunDistance))
                         SummaryRow(icon: "stopwatch.fill", title: "Time", value: "\(runSession.prevRunMinute):\(runSession.prevRunSecond)")
-                        SummaryRow(icon: "speedometer", title: "Pace", value: "\(runSession.prevRunMinPerMile)/mi")
+                        SummaryRow(icon: "speedometer", title: activityTypeSelected == .cycling ? "Speed" : "Pace", value: activityTypeSelected == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile)/mi")
+                        SummaryRow(icon: "mountain.2.fill", title: "Elevation Gain", value: String(format: "%.0f ft", runSession.prevRunElevationGain * 3.28084))
                     }
                     .padding()
                     .background(Color(UIColor.secondarySystemBackground))
@@ -377,9 +378,9 @@ struct RunInfoView: View {
                         }
 
                         VStack(alignment: .leading) {
-                            Text("PACE")
+                            Text(activityTypeSelected == .cycling ? "SPEED" : "PACE")
                                 .font(.caption2).bold().foregroundColor(.secondary)
-                            Text(runSession.prevRunMinPerMile)
+                            Text(activityTypeSelected == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile) /mi")
                                 .font(.system(size: 20, weight: .medium, design: .rounded))
                         }
                     }
@@ -489,7 +490,11 @@ struct RunInfoView: View {
                 let tick = Int(runSession.currentTimer * 10)
                 // Update pace every 3 seconds
                 if tick % 30 == 0 {
-                    runSession.prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
+                    if activityTypeSelected == .cycling {
+                        runSession.prevRunMinPerMile = calculateMPH(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
+                    } else {
+                        runSession.prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
+                    }
                 }
                 // Publish location to Firebase every 5 seconds
                 if tick % 50 == 0, inRunningMode, let loc = locationManager.location {
@@ -610,6 +615,7 @@ struct RunInfoView: View {
         runSession.prevRunMinute = minute
         runSession.prevRunSecond = seconds
         runSession.prevRunDistance = locationManager.convertToMiles()
+        runSession.prevRunElevationGain = locationManager.elevationGain
 
         // Check if the runner completed the selected route before stopping tracking
         if selectedRoute != nil, let loc = locationManager.location {
@@ -662,7 +668,8 @@ struct RunInfoView: View {
             distanceInMiles: runSession.prevRunDistance,
             calories: 0,
             activityType: activityTypeSelected,
-            routeLocations: runSession.runLocations
+            routeLocations: runSession.runLocations,
+            elevationGainMeters: runSession.prevRunElevationGain
         ) { success, error in
             if success {
                 self.showAlert = true
@@ -751,6 +758,7 @@ struct RunInfoView: View {
         runSession.prevRunMinute = 0
         runSession.prevRunSecond = ""
         runSession.prevRunDistance = 0
+        runSession.prevRunElevationGain = 0
         runSession.isRunDone = false
         runSession.routeCompleted = false
         runSession.isSaving = false
@@ -765,6 +773,13 @@ struct RunInfoView: View {
         let wholeMinutes = Int(minutesPerMile)
         let seconds = Int((minutesPerMile - Double(wholeMinutes)) * 60)
         return String(format: "%d:%02d", wholeMinutes, seconds)
+    }
+
+    private func calculateMPH(distance: Double, time: Double) -> String {
+        if time <= 0 || distance <= 0 { return "0.0" }
+        let hours = time / 60.0
+        let mph = distance / hours
+        return String(format: "%.1f", mph)
     }
 
 }

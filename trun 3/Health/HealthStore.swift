@@ -18,6 +18,7 @@ class HealthStore: ObservableObject {
         let shareTypes: Set<HKSampleType> = [
             HKObjectType.workoutType(),
             HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
+            HKObjectType.quantityType(forIdentifier: .distanceCycling)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKSeriesType.workoutRoute()
         ]
@@ -27,6 +28,7 @@ class HealthStore: ObservableObject {
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
+            HKObjectType.quantityType(forIdentifier: .distanceCycling)!,
             HKObjectType.workoutType(),
             HKSeriesType.workoutRoute()
         ]
@@ -56,7 +58,7 @@ class HealthStore: ObservableObject {
         healthStore.execute(query)
     }
     
-    func saveRun(startTime: Date, endTime: Date, distanceInMiles: Double, calories: Double, activityType: HKWorkoutActivityType, routeLocations: [CLLocation] = [], completion: @escaping (Bool, Error?) -> Void) {
+    func saveRun(startTime: Date, endTime: Date, distanceInMiles: Double, calories: Double, activityType: HKWorkoutActivityType, routeLocations: [CLLocation] = [], elevationGainMeters: Double = 0, completion: @escaping (Bool, Error?) -> Void) {
 
         // 1. Create the workout configuration
         let configuration = HKWorkoutConfiguration()
@@ -66,29 +68,36 @@ class HealthStore: ObservableObject {
         // 2. Create the builder
         let builder = HKWorkoutBuilder(healthStore: healthStore, configuration: configuration, device: .local())
 
-        // 3. Begin collection
+        // 3. Add elevation gain as workout metadata
+        if elevationGainMeters > 0 {
+            let elevationQuantity = HKQuantity(unit: .meter(), doubleValue: elevationGainMeters)
+            builder.addMetadata([HKMetadataKeyElevationAscended: elevationQuantity]) { _, _ in }
+        }
+
+        // 4. Begin collection
         builder.beginCollection(withStart: startTime) { (success, error) in
             guard success else {
                 completion(false, error)
                 return
             }
 
-            // 4. Create samples for the workout (Distance & Energy)
+            // 5. Create samples for the workout (Distance & Energy)
             let meters = distanceInMiles * 1609.34
             let distanceQuantity = HKQuantity(unit: HKUnit.meter(), doubleValue: meters)
-            let distanceSample = HKQuantitySample(type: HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!, quantity: distanceQuantity, start: startTime, end: endTime)
+            let distanceTypeIdentifier: HKQuantityTypeIdentifier = activityType == .cycling ? .distanceCycling : .distanceWalkingRunning
+            let distanceSample = HKQuantitySample(type: HKQuantityType.quantityType(forIdentifier: distanceTypeIdentifier)!, quantity: distanceQuantity, start: startTime, end: endTime)
 
             let caloriesQuantity = HKQuantity(unit: HKUnit.kilocalorie(), doubleValue: calories)
             let calorieSample = HKQuantitySample(type: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!, quantity: caloriesQuantity, start: startTime, end: endTime)
 
-            // 5. Add samples to the builder
+            // 6. Add samples to the builder
             builder.add([distanceSample, calorieSample]) { (success, error) in
                 guard success else {
                     completion(false, error)
                     return
                 }
 
-                // 6. End collection and Finish the workout
+                // 7. End collection and Finish the workout
                 builder.endCollection(withEnd: endTime) { (success, error) in
                     guard success else {
                         completion(false, error)
