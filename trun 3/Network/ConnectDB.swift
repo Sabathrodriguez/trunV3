@@ -16,7 +16,11 @@ import FirebaseAppCheck
 
 class TrunAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
     func createProvider(with app: FirebaseApp) -> (any AppCheckProvider)? {
+        #if targetEnvironment(simulator)
+        return AppCheckDebugProvider(app: app)
+        #else
         return AppAttestProvider(app: app)
+        #endif
     }
 }
 

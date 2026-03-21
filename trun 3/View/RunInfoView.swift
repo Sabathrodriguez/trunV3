@@ -641,7 +641,7 @@ struct RunInfoView: View {
         generator.prepare()
         generator.selectionChanged()
         runSession.isRunDone = true
-        runningMenuHeight = .large
+        runningMenuHeight = .height(250)
 
         // Stop multiplayer session
         liveRunService.stopSession()

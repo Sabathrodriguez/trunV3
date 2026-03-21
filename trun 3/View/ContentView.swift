@@ -87,6 +87,7 @@ struct ContentView: View {
     @State private var showRouteGenerator = false
     @State private var showProfile = false
     @State private var cachedRouteCoords: [CLLocationCoordinate2D]? = nil
+    @State private var completedRunCoords: [CLLocationCoordinate2D]? = nil
     @StateObject private var profileService = ProfileService()
     
     // We can use the LocationManager from the view model if it's accessible,
@@ -145,6 +146,42 @@ struct ContentView: View {
                         }
                     }
                     
+                    // Completed run route overlay
+                    if let coords = completedRunCoords, coords.count >= 2, runSession.isRunDone {
+                        ForEach(RouteAnnotationHelpers.rainbowSegments(from: coords)) { segment in
+                            MapPolyline(coordinates: segment.coordinates)
+                                .stroke(segment.color, lineWidth: 5)
+                        }
+
+                        Annotation("Start", coordinate: coords.first!) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 16, height: 16)
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 2)
+                                    .frame(width: 16, height: 16)
+                            }
+                        }
+
+                        Annotation("Finish", coordinate: coords.last!) {
+                            Image(systemName: "flag.fill")
+                                .foregroundColor(.red)
+                                .font(.system(size: 20))
+                                .shadow(radius: 2)
+                        }
+
+                        ForEach(RouteAnnotationHelpers.generateArrows(from: coords)) { arrow in
+                            Annotation("", coordinate: arrow.coordinate, anchor: .center) {
+                                Image(systemName: "arrowtriangle.forward.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white)
+                                    .shadow(color: .black, radius: 1)
+                                    .rotationEffect(.degrees(arrow.bearing - 90))
+                            }
+                        }
+                    }
+
                     ForEach(liveRunService.liveRunners.filter { $0.name != "You" }) { runner in
                         Annotation(runner.name, coordinate: runner.location) {
                             RunnerAnnotationView(runner: runner)
@@ -189,6 +226,43 @@ struct ContentView: View {
                 }
                 .onChange(of: routes) { _ in
                     RouteStorageService.saveRoutes(routes)
+                }
+                .onChange(of: runSession.isRunDone) { isDone in
+                    if isDone && !runSession.runLocations.isEmpty {
+                        let coords = runSession.runLocations.map { $0.coordinate }
+                        completedRunCoords = coords
+
+                        // Zoom map to fit the completed route, offset for the 250pt bottom sheet
+                        let lats = coords.map { $0.latitude }
+                        let lons = coords.map { $0.longitude }
+                        if let minLat = lats.min(), let maxLat = lats.max(),
+                           let minLon = lons.min(), let maxLon = lons.max() {
+                            let latDelta = (maxLat - minLat) * 1.3 + 0.002
+                            let lonDelta = (maxLon - minLon) * 1.3 + 0.002
+                            let routeCenterLat = (minLat + maxLat) / 2
+                            let routeCenterLon = (minLon + maxLon) / 2
+
+                            // Shift center upward so the route is centered in the visible area above the sheet
+                            // The 250pt sheet covers roughly 30% of the screen height, so shift by ~30% of the lat span
+                            let sheetOffsetFraction = 0.3
+                            let adjustedCenterLat = routeCenterLat + latDelta * sheetOffsetFraction / 2
+
+                            let center = CLLocationCoordinate2D(
+                                latitude: adjustedCenterLat,
+                                longitude: routeCenterLon
+                            )
+                            let span = MKCoordinateSpan(
+                                latitudeDelta: latDelta,
+                                longitudeDelta: lonDelta
+                            )
+                            let region = MKCoordinateRegion(center: center, span: span)
+                            withAnimation {
+                                viewModel.regionView = .region(region)
+                            }
+                        }
+                    } else if !isDone {
+                        completedRunCoords = nil
+                    }
                 }
 
                 // PROFILE BUTTON OVERLAY
