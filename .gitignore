@@ -74,3 +74,14 @@ Secrets.plist
 
 # Xcode / Swift
 *.swiftpm
+xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Misc
+appointment.ics
