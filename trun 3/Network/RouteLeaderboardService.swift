@@ -16,11 +16,16 @@ class RouteLeaderboardService: ObservableObject {
     private let db = Firestore.firestore()
 
     /// Save a completed run to the route's leaderboard in Firestore.
-    func saveCompletedRun(sharedRouteID: String, time: Double, distance: Double, pace: String, routeProgress: Double) {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
+    /// The optional completion is called on the main thread once the write finishes.
+    func saveCompletedRun(sharedRouteID: String, time: Double, distance: Double, pace: String, routeProgress: Double, completion: (() -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?()
+            return
+        }
 
+        let firestore = Firestore.firestore()
         let routeKey = sharedRouteID
-        let data: [String: Any] = [
+        let runData: [String: Any] = [
             "uid": uid,
             "time": time,
             "distance": distance,
@@ -29,9 +34,27 @@ class RouteLeaderboardService: ObservableObject {
             "date": FieldValue.serverTimestamp()
         ]
 
-        db.collection("routeLeaderboards").document(routeKey).collection("runs").addDocument(data: data) { error in
+        // Ensure parent leaderboard document exists (required for subcollection queries)
+        let parentRef = firestore.collection("routeLeaderboards").document(routeKey)
+        parentRef.setData(["sharedRouteID": sharedRouteID], merge: true)
+
+        parentRef.collection("runs").addDocument(data: runData) { error in
             if let error = error {
                 print("Error saving run to leaderboard: \(error)")
+            }
+
+            // Increment runCount on the shared route document
+            // Uses Firestore.firestore() directly so it works even if this
+            // RouteLeaderboardService instance has been deallocated
+            firestore.collection("sharedRoutes").document(sharedRouteID).updateData([
+                "runCount": FieldValue.increment(Int64(1))
+            ]) { error in
+                if let error = error {
+                    print("Error incrementing runCount: \(error)")
+                }
+                DispatchQueue.main.async {
+                    completion?()
+                }
             }
         }
     }

@@ -63,7 +63,8 @@ class SharedRouteService: ObservableObject {
     }
 
     /// Publish a route to the shared library with its center coordinates for geo-filtering.
-    func publishRoute(name: String, gpxString: String, distanceMiles: Double, coordinates: [CLLocationCoordinate2D], completion: @escaping (Result<Void, Error>) -> Void) {
+    /// Returns the Firestore document ID on success so callers can link the route locally.
+    func publishRoute(name: String, gpxString: String, distanceMiles: Double, coordinates: [CLLocationCoordinate2D], completion: @escaping (Result<String, Error>) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             print("[DEBUG] publishRoute failed: No authenticated user (currentUser is nil)")
             completion(.failure(PublishError.notAuthenticated))
@@ -121,13 +122,14 @@ class SharedRouteService: ObservableObject {
                 "runCount": 0
             ]
 
-            self.db.collection("sharedRoutes").addDocument(data: data) { error in
+            var ref: DocumentReference? = nil
+            ref = self.db.collection("sharedRoutes").addDocument(data: data) { error in
                 DispatchQueue.main.async {
                     if let error = error {
                         print("Error publishing route: \(error)")
                         completion(.failure(error))
                     } else {
-                        completion(.success(()))
+                        completion(.success(ref!.documentID))
                     }
                 }
             }
@@ -309,6 +311,19 @@ class SharedRouteService: ObservableObject {
             }
             let gpxData = snapshot?.data()?["gpxData"] as? String
             completion(gpxData)
+        }
+    }
+    
+    func getRouteRunNum(docID: String, completion: @escaping (Int?) -> Void) {
+        db.collection("sharedRoutes").document(docID).getDocument { snapshot, error in
+            if let error = error {
+                print("Error fetching route GPX: \(error)")
+                completion(nil)
+                return
+            }
+            let runCount = snapshot?.data()?["runCount"] as? Int
+            completion(runCount)
+            let _ = print("Run Count: \(runCount!)")
         }
     }
 }

@@ -1,11 +1,16 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Route leaderboard: completed runs
-    match /routes/{routeID}/runs/{docID} {
+    // Route leaderboard: parent document and completed runs
+    match /routeLeaderboards/{routeID} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if false;
+      allow write: if request.auth != null;
+
+      match /runs/{docID} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
 
     // User profiles
@@ -18,7 +23,8 @@ service cloud.firestore {
     match /sharedRoutes/{docID} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow update: if false;
+      allow update: if request.auth != null
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['runCount']);
       allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
   }

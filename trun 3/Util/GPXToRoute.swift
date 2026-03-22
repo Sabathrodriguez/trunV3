@@ -19,8 +19,23 @@ class GPXToRoute {
                 print("Error reading external file: \(error)")
             }
         }
-        
-        // 2. Fallback to Bundle resource (for default assets)
+
+        // 2. Try resolving the filename in the app's Documents directory
+        //    (handles cases where only a filename or a stale absolute path was stored)
+        let justFilename = (fileName as NSString).lastPathComponent
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let documentsPath = documentsURL.appendingPathComponent(justFilename).path
+        if documentsPath != fileName, FileManager.default.fileExists(atPath: documentsPath) {
+            do {
+                let data = try Data(contentsOf: URL(fileURLWithPath: documentsPath))
+                let parser = GPXParser()
+                return parser.parseGPX(data: data)
+            } catch {
+                print("Error reading file from Documents: \(error)")
+            }
+        }
+
+        // 3. Fallback to Bundle resource (for default assets)
         if let path = Bundle.main.path(forResource: fileName, ofType: "gpx") {
              do {
                 let data = try Data(contentsOf: URL(fileURLWithPath: path))
@@ -31,7 +46,7 @@ class GPXToRoute {
                 return nil
             }
         }
-        
+
         print("GPX file not found: \(fileName)")
         return nil
     }

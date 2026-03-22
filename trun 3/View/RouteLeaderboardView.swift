@@ -68,6 +68,13 @@ struct RouteLeaderboardView: View {
         .onAppear {
             if let sharedRouteID = sharedRouteID {
                 service.fetchLeaderboard(sharedRouteID: sharedRouteID)
+                // Re-fetch after a delay — for newly created subcollections,
+                // the first query may return empty due to Firestore propagation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    if service.leaderboard.isEmpty {
+                        service.fetchLeaderboard(sharedRouteID: sharedRouteID)
+                    }
+                }
             }
         }
         .onChange(of: sharedRouteID) { newID in

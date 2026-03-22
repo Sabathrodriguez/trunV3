@@ -53,7 +53,11 @@ struct ContentView: View {
     private static let defaultRoutes: [Route] = []
 
     private static func loadInitialRoutes() -> [String: [Route]] {
-        return ["Run Detroit": defaultRoutes]
+        var routes = ["Run Detroit": defaultRoutes, "My Runs": [Route]()]
+        if let saved = RouteStorageService.loadRoutes() {
+            routes.merge(saved) { _, saved in saved }
+        }
+        return routes
     }
     
     @State var selectedRoute: Route? = nil
@@ -482,6 +486,69 @@ struct ContentView: View {
                                     .background(Color(UIColor.secondarySystemBackground))
                                     .cornerRadius(16)
 
+                                // MY RUNS (routes created from free runs)
+                                if let myRuns = routes["My Runs"], !myRuns.isEmpty {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Text("My Runs")
+                                            .font(.headline)
+
+                                        ScrollView(.vertical, showsIndicators: false) {
+                                            VStack(spacing: 6) {
+                                                ForEach(myRuns) { route in
+                                                    HStack {
+                                                        Circle()
+                                                            .fill(Color(red: route.color[0], green: route.color[1], blue: route.color[2]))
+                                                            .frame(width: 12, height: 12)
+
+                                                        Text(route.name)
+                                                            .font(.subheadline)
+                                                            .fontWeight(selectedRoute?.id == route.id ? .bold : .regular)
+                                                            .lineLimit(1)
+
+                                                        Spacer()
+
+                                                        if selectedRoute?.id == route.id {
+                                                            Text("Active")
+                                                                .font(.caption2)
+                                                                .fontWeight(.bold)
+                                                                .foregroundColor(.green)
+                                                                .padding(.horizontal, 8)
+                                                                .padding(.vertical, 3)
+                                                                .background(Color.green.opacity(0.15))
+                                                                .cornerRadius(6)
+                                                        }
+
+                                                        Button(action: {
+                                                            removeMyRun(route)
+                                                        }) {
+                                                            Image(systemName: "xmark.circle.fill")
+                                                                .font(.body)
+                                                                .foregroundColor(.secondary)
+                                                        }
+                                                    }
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 8)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 10)
+                                                            .fill(selectedRoute?.id == route.id ? Color.blue.opacity(0.1) : Color.clear)
+                                                            .overlay(
+                                                                RoundedRectangle(cornerRadius: 10)
+                                                                    .stroke(selectedRoute?.id == route.id ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 1)
+                                                            )
+                                                    )
+                                                    .contentShape(Rectangle())
+                                                    .onTapGesture {
+                                                        selectedRoute = route
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemBackground))
+                                    .cornerRadius(16)
+                                }
+
                                 // ROUTE LEADERBOARD
                                 if let route = selectedRoute {
                                     RouteLeaderboardView(
@@ -654,7 +721,10 @@ struct ContentView: View {
                                 distanceMiles: pendingDistance,
                                 coordinates: pendingCoords
                             ) { result in
-                                if case .failure(let error) = result {
+                                switch result {
+                                case .success(_):
+                                    break
+                                case .failure(let error):
                                     alertTitle = "Upload Failed"
                                     alertDetails = error.localizedDescription
                                     showAlert = true
@@ -753,6 +823,14 @@ struct ContentView: View {
         }
     }
 
+    private func removeMyRun(_ route: Route) {
+        routes["My Runs"]?.removeAll { $0.id == route.id }
+
+        if selectedRoute?.id == route.id {
+            selectedRoute = nil
+        }
+    }
+
     // Logic to import the GPX file...
     private func importGPX(from url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }
@@ -789,7 +867,7 @@ struct ContentView: View {
             let newRoute = Route(
                 id: newId,
                 name: name,
-                GPXFileURL: destinationURL.path,
+                GPXFileURL: destinationURL.lastPathComponent,
                 color: [0.0, 0.5, 1.0]
             )
 

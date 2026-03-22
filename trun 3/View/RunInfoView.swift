@@ -126,6 +126,13 @@ struct RunInfoView: View {
     @State var activityTypeArray: [HKWorkoutActivityType] = [.running, .walking, .cycling]
     @State var activityTypeSelected = HKWorkoutActivityType.running
 
+    // Share as Route state
+    @State private var showShareRoutePrompt = false
+    @State private var shareRouteName = ""
+    @State private var isPublishing = false
+    @State private var hasSubmittedLeaderboardEntry = false
+    @StateObject private var publishService = SharedRouteService()
+
     var body: some View {
         let twoDecimalPlaceRun = String(format: "%.2f", locationManager.convertToMiles())
         let minute = Int(runSession.currentTimer/60)
@@ -198,6 +205,29 @@ struct RunInfoView: View {
                         .cornerRadius(12)
                     }
                     .disabled(stravaButtonDisabled)
+                    }
+
+                    // Share as Route button (free runs only)
+                    if selectedRoute == nil && !runSession.runLocations.isEmpty {
+                        Button(action: {
+                            shareRouteName = ""
+                            showShareRoutePrompt = true
+                        }) {
+                            HStack(spacing: 8) {
+                                if isPublishing {
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                                Text(isPublishing ? "Publishing..." : "Share as Route")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(isPublishing ? Color.teal.opacity(0.5) : Color.teal)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
+                        }
+                        .disabled(isPublishing)
                     }
                 }
                 .padding(.horizontal)
@@ -518,6 +548,17 @@ struct RunInfoView: View {
             }
         }
         .onAppear { checkCameraAvailability() }
+        .alert("Share as Route", isPresented: $showShareRoutePrompt) {
+            TextField("Route name", text: $shareRouteName)
+            Button("Share") {
+                let sanitized = GPXValidator.sanitizeRouteName(shareRouteName)
+                let name = sanitized.isEmpty ? "My Run" : sanitized
+                shareRunAsRoute(name: name)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Give your run a name to share it as a route others can run.")
+        }
     }
 
     // MARK: - Strava Export
@@ -685,8 +726,9 @@ struct RunInfoView: View {
             }
         }
 
-        // Save to route leaderboard in Firestore (only if a route was selected, completed, and has a shared ID)
-        if let route = selectedRoute, runSession.routeCompleted, let sharedID = route.sharedRouteID {
+        // Save to route leaderboard in Firestore (only if a route was selected, completed, has a shared ID, and hasn't already been submitted)
+        if let route = selectedRoute, runSession.routeCompleted, let sharedID = route.sharedRouteID, !hasSubmittedLeaderboardEntry {
+            hasSubmittedLeaderboardEntry = true
             RouteLeaderboardService().saveCompletedRun(
                 sharedRouteID: sharedID,
                 time: runSession.runData.time,
@@ -695,6 +737,127 @@ struct RunInfoView: View {
                 routeProgress: 1.0
             )
         }
+    }
+
+    // MARK: - Share as Route
+
+    private func shareRunAsRoute(name: String) {
+        guard !isPublishing, !hasSubmittedLeaderboardEntry else { return }
+        isPublishing = true
+        hasSubmittedLeaderboardEntry = true
+        runSession.isSaving = true
+
+        let locations = runSession.runLocations
+        let coordinates = locations.map { $0.coordinate }
+        let gpxString = createGPXFromLocations(locations)
+        let distanceMiles = runSession.prevRunDistance
+
+        publishService.publishRoute(
+            name: name,
+            gpxString: gpxString,
+            distanceMiles: distanceMiles,
+            coordinates: coordinates
+        ) { result in
+            switch result {
+            case .success(let docID):
+                // Save GPX file locally
+                let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let filename = name.replacingOccurrences(of: " ", with: "_") + ".gpx"
+                let fileURL = documentsURL.appendingPathComponent(filename)
+
+                do {
+                    try gpxString.write(to: fileURL, atomically: true, encoding: .utf8)
+                } catch {
+                    print("Error saving GPX file locally: \(error)")
+                }
+
+                // Create local route
+                let allRoutes = (self.routes["My Runs"] ?? []) + (self.routes["Run Detroit"] ?? [])
+                let maxId = allRoutes.map { $0.id }.max() ?? 0
+                let newRoute = Route(
+                    id: maxId + 1,
+                    name: name,
+                    GPXFileURL: fileURL.lastPathComponent,
+                    color: [0.0, 0.8, 0.8],
+                    sharedRouteID: docID
+                )
+
+                self.routes["My Runs"] = (self.routes["My Runs"] ?? []) + [newRoute]
+
+                // Save first run to leaderboard, then set selectedRoute so the
+                // leaderboard fetch happens AFTER the write is confirmed
+                let runTime = Double(self.runSession.prevRunMinute) + (Double(self.runSession.prevRunSecond) ?? 0) / 60
+                RouteLeaderboardService().saveCompletedRun(
+                    sharedRouteID: docID,
+                    time: runTime,
+                    distance: self.runSession.prevRunDistance,
+                    pace: self.runSession.prevRunMinPerMile,
+                    routeProgress: 1.0
+                ) {
+                    // Step n is done — now move to n+1
+                    self.selectedRoute = newRoute
+
+                    // Also save to Apple Health so user doesn't need to tap "Save Run" separately
+                    self.healthStore.saveRun(
+                        startTime: self.runSession.runData.startTime,
+                        endTime: Date(),
+                        distanceInMiles: self.runSession.prevRunDistance,
+                        calories: 0,
+                        activityType: self.activityTypeSelected,
+                        routeLocations: locations,
+                        elevationGainMeters: self.runSession.prevRunElevationGain
+                    ) { _, _ in }
+
+                    self.isPublishing = false
+                    self.showAlert = true
+                    self.alertTitle = "Route Shared!"
+                    self.alertDetails = "Your run has been shared as \"\(name)\" and saved to Apple Health."
+                }
+
+            case .failure(let error):
+                self.isPublishing = false
+                self.runSession.isSaving = false
+                self.showAlert = true
+                self.alertTitle = "Share Failed"
+                self.alertDetails = error.localizedDescription
+            }
+        }
+    }
+
+    private func createGPXFromLocations(_ locations: [CLLocation]) -> String {
+        let dateFormatter = ISO8601DateFormatter()
+
+        var gpx = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="TrunApp" xmlns="http://www.topografix.com/GPX/1/1">
+            <trk>
+                <name>Recorded Run</name>
+                <trkseg>
+        """
+
+        for loc in locations {
+            let lat = loc.coordinate.latitude
+            let lon = loc.coordinate.longitude
+            let ele = loc.altitude
+            let time = dateFormatter.string(from: loc.timestamp)
+
+            gpx += """
+
+                    <trkpt lat="\(lat)" lon="\(lon)">
+                        <ele>\(ele)</ele>
+                        <time>\(time)</time>
+                    </trkpt>
+            """
+        }
+
+        gpx += """
+
+                </trkseg>
+            </trk>
+        </gpx>
+        """
+
+        return gpx
     }
 
     private func checkCameraAvailability() {
@@ -733,7 +896,7 @@ struct RunInfoView: View {
                 let newRoute = Route(
                     id: maxId + 1,
                     name: sharedRoute.name,
-                    GPXFileURL: fileURL.path,
+                    GPXFileURL: fileURL.lastPathComponent,
                     color: [0.0, 0.5, 1.0],
                     sharedRouteID: sharedRoute.id
                 )
@@ -763,6 +926,7 @@ struct RunInfoView: View {
         runSession.routeCompleted = false
         runSession.isSaving = false
         runSession.runLocations = []
+        hasSubmittedLeaderboardEntry = false
     }
 
     private func calculateMilesPerMinute(distance: Double, time: Double) -> String {
