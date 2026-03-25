@@ -36,8 +36,33 @@ class LiveRunService: ObservableObject {
     private var currentUID: String? { Auth.auth().currentUser?.uid }
     private var isSessionActive = false
 
+    // Heartbeat & staleness
+    private var heartbeatTimer: Timer?
+    private var staleSweeTimer: Timer?
+    /// Runners with timestamps older than this (in seconds) are considered stale and removed.
+    private let staleThreshold: TimeInterval = 60
+
     init() {
         self.dbRef = Database.database().reference()
+    }
+
+    // MARK: - Cleanup Stale Entries (call on app launch)
+
+    /// Remove any leftover Firebase entry for the current user across all routes.
+    /// Call this on app launch to clean up ghost entries from prior crashes.
+    func cleanupOwnStaleEntries() {
+        guard let uid = currentUID else { return }
+
+        let activeRunsRef = dbRef.child("activeRuns")
+        activeRunsRef.observeSingleEvent(of: .value) { snapshot in
+            for routeChild in snapshot.children {
+                guard let routeSnapshot = routeChild as? DataSnapshot else { continue }
+                if routeSnapshot.hasChild(uid) {
+                    activeRunsRef.child(routeSnapshot.key).child(uid).removeValue()
+                    print("[LiveRunService] Cleaned up stale entry for \(uid) in route \(routeSnapshot.key)")
+                }
+            }
+        }
     }
 
     // MARK: - Start Live Session
@@ -74,6 +99,12 @@ class LiveRunService: ObservableObject {
 
         // Subscribe to other runners via granular child events
         attachListeners()
+
+        // Start heartbeat to keep our timestamp fresh (every 10s)
+        startHeartbeat()
+
+        // Start periodic sweep to remove stale runners (every 15s)
+        startStaleSweep()
     }
 
     // MARK: - Publish Location
@@ -112,6 +143,12 @@ class LiveRunService: ObservableObject {
     func stopSession() {
         // Deactivate session first to prevent callbacks from re-populating state
         isSessionActive = false
+
+        // Stop timers
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+        staleSweeTimer?.invalidate()
+        staleSweeTimer = nil
 
         // Remove listeners
         if let ref = routeRef {
@@ -171,14 +208,28 @@ class LiveRunService: ObservableObject {
         guard let data = snapshot.value as? [String: Any],
               let routeID = currentRouteID else { return }
 
+        // Skip the current user — we manage their entry locally in publishLocation
+        if uid == currentUID { return }
+
+        // Check staleness — Firebase server timestamps are in milliseconds
+        if let timestamp = data["t"] as? Double {
+            let ageSeconds = (Date().timeIntervalSince1970 * 1000 - timestamp) / 1000
+            if ageSeconds > staleThreshold {
+                // Remove the stale entry from Firebase and local state
+                routeRef?.child(uid).removeValue()
+                runnersDict.removeValue(forKey: uid)
+                joinOrder.removeAll { $0 == uid }
+                publishRunners()
+                print("[LiveRunService] Removed stale runner \(uid) (age: \(Int(ageSeconds))s)")
+                return
+            }
+        }
+
         // Track join order for anonymous labeling
         if !joinOrder.contains(uid) {
             joinOrder.append(uid)
         }
         let index = joinOrder.firstIndex(of: uid) ?? 0
-
-        // Skip the current user — we manage their entry locally in publishLocation
-        if uid == currentUID { return }
 
         let currentProgress = data["p"] as? Double ?? 0
         let publishedPace = data["pa"] as? String ?? "--:--"
@@ -198,6 +249,49 @@ class LiveRunService: ObservableObject {
             withAnimation(.easeInOut(duration: 0.5)) {
                 self.liveRunners = Array(self.runnersDict.values)
             }
+        }
+    }
+
+    // MARK: - Heartbeat & Stale Sweep
+
+    /// Periodically write a fresh server timestamp so other clients know we're alive.
+    private func startHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.userRef?.updateChildValues(["t": ServerValue.timestamp()])
+        }
+    }
+
+    /// Periodically scan local runnersDict and query Firebase to remove stale entries.
+    private func startStaleSweep() {
+        staleSweeTimer?.invalidate()
+        staleSweeTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            self?.sweepStaleRunners()
+        }
+    }
+
+    private func sweepStaleRunners() {
+        guard isSessionActive, let ref = routeRef, let myUID = currentUID else { return }
+
+        ref.observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self, self.isSessionActive else { return }
+            let now = Date().timeIntervalSince1970 * 1000 // ms
+
+            for child in snapshot.children {
+                guard let childSnapshot = child as? DataSnapshot,
+                      childSnapshot.key != myUID,
+                      let data = childSnapshot.value as? [String: Any],
+                      let timestamp = data["t"] as? Double else { continue }
+
+                let ageSeconds = (now - timestamp) / 1000
+                if ageSeconds > self.staleThreshold {
+                    ref.child(childSnapshot.key).removeValue()
+                    self.runnersDict.removeValue(forKey: childSnapshot.key)
+                    self.joinOrder.removeAll { $0 == childSnapshot.key }
+                    print("[LiveRunService] Sweep removed stale runner \(childSnapshot.key) (age: \(Int(ageSeconds))s)")
+                }
+            }
+            self.publishRunners()
         }
     }
 

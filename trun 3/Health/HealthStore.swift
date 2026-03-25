@@ -13,6 +13,49 @@ class HealthStore: ObservableObject {
     let healthStore = HKHealthStore()
     @Published var weeklyDistances: [HKWorkoutActivityType: Double] = [.running: 0, .walking: 0, .cycling: 0]
 
+    // MARK: - Live Workout Session (background protection, iOS 26+)
+    private var _workoutSession: Any?
+    private var _liveBuilder: Any?
+
+    /// Start an HKWorkoutSession so iOS keeps the app alive in the background.
+    func startWorkoutSession(activityType: HKWorkoutActivityType) {
+        guard #available(iOS 26.0, *) else { return }
+
+        let config = HKWorkoutConfiguration()
+        config.activityType = activityType
+        config.locationType = .outdoor
+
+        do {
+            let session = try HKWorkoutSession(healthStore: healthStore, configuration: config)
+            let builder = session.associatedWorkoutBuilder()
+            builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: config)
+
+            session.startActivity(with: Date())
+            builder.beginCollection(withStart: Date()) { _, _ in }
+
+            self._workoutSession = session
+            self._liveBuilder = builder
+            print("[HealthStore] Workout session started for background protection")
+        } catch {
+            print("[HealthStore] Failed to start workout session: \(error)")
+        }
+    }
+
+    /// End the live workout session. The workout is discarded because saveRun() handles persistence separately.
+    func endWorkoutSession() {
+        guard #available(iOS 26.0, *) else { return }
+        guard let session = _workoutSession as? HKWorkoutSession else { return }
+        let builder = _liveBuilder as? HKLiveWorkoutBuilder
+
+        session.end()
+        builder?.endCollection(withEnd: Date()) { [weak self] _, _ in
+            builder?.discardWorkout()
+            self?._workoutSession = nil
+            self?._liveBuilder = nil
+            print("[HealthStore] Workout session ended and discarded")
+        }
+    }
+
     func requestAuthorization(completion: @escaping (Bool, Error?) -> ()) {
         // 1. Define the types you want to WRITE (Share)
         let shareTypes: Set<HKSampleType> = [

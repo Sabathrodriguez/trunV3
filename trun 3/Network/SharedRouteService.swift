@@ -129,6 +129,7 @@ class SharedRouteService: ObservableObject {
                         print("Error publishing route: \(error)")
                         completion(.failure(error))
                     } else {
+                        SharedRouteCacheService.clear()
                         completion(.success(ref!.documentID))
                     }
                 }
@@ -137,7 +138,17 @@ class SharedRouteService: ObservableObject {
     }
 
     /// Fetch routes within ~10 miles of the user's current location.
-    func fetchNearbyRoutes(userLat: Double, userLon: Double, radiusMiles: Double = 10, limit: Int = 30) {
+    /// Checks local cache first; falls back to Firestore if cache is stale or user moved.
+    func fetchNearbyRoutes(userLat: Double, userLon: Double, radiusMiles: Double = 10, limit: Int = 30, forceRefresh: Bool = false) {
+
+        // Check cache first (unless force refresh)
+        if !forceRefresh,
+           let cache = SharedRouteCacheService.load(),
+           SharedRouteCacheService.isValid(cache: cache, currentLat: userLat, currentLon: userLon) {
+            self.nearbyRoutes = cache.routes
+            return
+        }
+
         isLoading = true
 
         // ~0.0145 degrees latitude per mile, ~0.018 degrees longitude per mile at mid-latitudes
@@ -157,6 +168,12 @@ class SharedRouteService: ObservableObject {
 
                 if let error = error {
                     print("Error fetching nearby routes: \(error)")
+                    // Fall back to stale cache on network error
+                    if let staleCache = SharedRouteCacheService.load() {
+                        DispatchQueue.main.async {
+                            self.nearbyRoutes = staleCache.routes
+                        }
+                    }
                     return
                 }
 
@@ -185,6 +202,16 @@ class SharedRouteService: ObservableObject {
 
                 // Sort by popularity (most runs first)
                 routes.sort { $0.runCount > $1.runCount }
+
+                // Save to cache
+                let cache = SharedRouteCache(
+                    routes: routes,
+                    cachedAt: Date(),
+                    userLat: userLat,
+                    userLon: userLon,
+                    radiusMiles: radiusMiles
+                )
+                SharedRouteCacheService.save(cache)
 
                 DispatchQueue.main.async {
                     self.nearbyRoutes = routes

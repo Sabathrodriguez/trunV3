@@ -123,8 +123,7 @@ struct RunInfoView: View {
     @StateObject private var stravaUploadService = StravaUploadService()
     @ObservedObject private var stravaAuth = StravaAuthService.shared
     
-    @State var activityTypeArray: [HKWorkoutActivityType] = [.running, .walking, .cycling]
-    @State var activityTypeSelected = HKWorkoutActivityType.running
+    private let activityTypeArray: [HKWorkoutActivityType] = [.running, .walking, .cycling]
 
     // Share as Route state
     @State private var showShareRoutePrompt = false
@@ -146,7 +145,7 @@ struct RunInfoView: View {
                     VStack(spacing: 15) {
                         SummaryRow(icon: "map.fill", title: "Distance", value: String(format: "%.2f mi", runSession.prevRunDistance))
                         SummaryRow(icon: "stopwatch.fill", title: "Time", value: "\(runSession.prevRunMinute):\(runSession.prevRunSecond)")
-                        SummaryRow(icon: "speedometer", title: activityTypeSelected == .cycling ? "Speed" : "Pace", value: activityTypeSelected == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile)/mi")
+                        SummaryRow(icon: "speedometer", title: runSession.activityType == .cycling ? "Speed" : "Pace", value: runSession.activityType == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile)/mi")
                         SummaryRow(icon: "mountain.2.fill", title: "Elevation Gain", value: String(format: "%.0f ft", runSession.prevRunElevationGain * 3.28084))
                     }
                     .padding()
@@ -372,7 +371,7 @@ struct RunInfoView: View {
                     .padding()
                     
 
-                    Picker("Select an option", selection: $activityTypeSelected) {
+                    Picker("Select an option", selection: $runSession.activityType) {
                         ForEach(activityTypeArray, id: \.self) { option in
                             Text(option.name).tag(option).padding()
                         }
@@ -408,9 +407,9 @@ struct RunInfoView: View {
                         }
 
                         VStack(alignment: .leading) {
-                            Text(activityTypeSelected == .cycling ? "SPEED" : "PACE")
+                            Text(runSession.activityType == .cycling ? "SPEED" : "PACE")
                                 .font(.caption2).bold().foregroundColor(.secondary)
-                            Text(activityTypeSelected == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile) /mi")
+                            Text(runSession.activityType == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile) /mi")
                                 .font(.system(size: 20, weight: .medium, design: .rounded))
                         }
                     }
@@ -520,7 +519,7 @@ struct RunInfoView: View {
                 let tick = Int(runSession.currentTimer * 10)
                 // Update pace every 3 seconds
                 if tick % 30 == 0 {
-                    if activityTypeSelected == .cycling {
+                    if runSession.activityType == .cycling {
                         runSession.prevRunMinPerMile = calculateMPH(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
                     } else {
                         runSession.prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
@@ -533,6 +532,11 @@ struct RunInfoView: View {
                         distanceMiles: locationManager.convertToMiles(),
                         pace: runSession.prevRunMinPerMile
                     )
+                }
+                // Persist run snapshot every 10 seconds
+                if tick % 100 == 0, inRunningMode {
+                    let snapshot = runSession.buildSnapshot(locationManager: locationManager)
+                    RunPersistenceService.save(snapshot)
                 }
             }
         }
@@ -645,6 +649,13 @@ struct RunInfoView: View {
         runSession.pausedDuration = 0.0
         runSession.pauseStartDate = nil
 
+        // Start HKWorkoutSession for background protection
+        healthStore.startWorkoutSession(activityType: runSession.activityType)
+
+        // Save initial snapshot so even a very early crash is recoverable
+        let snapshot = runSession.buildSnapshot(locationManager: locationManager)
+        RunPersistenceService.save(snapshot)
+
         // Start multiplayer session only if a route is selected
         if let route = selectedRoute {
             let routeCoords = GPXToRoute().convertGPXToRoute(filePath: route.GPXFileURL) ?? []
@@ -684,6 +695,10 @@ struct RunInfoView: View {
         runSession.isRunDone = true
         runningMenuHeight = .height(250)
 
+        // End workout session and clear persistence snapshot
+        healthStore.endWorkoutSession()
+        RunPersistenceService.clear()
+
         // Stop multiplayer session
         liveRunService.stopSession()
     }
@@ -708,7 +723,7 @@ struct RunInfoView: View {
             endTime: Date(),
             distanceInMiles: runSession.prevRunDistance,
             calories: 0,
-            activityType: activityTypeSelected,
+            activityType: runSession.activityType,
             routeLocations: runSession.runLocations,
             elevationGainMeters: runSession.prevRunElevationGain
         ) { success, error in
@@ -803,7 +818,7 @@ struct RunInfoView: View {
                         endTime: Date(),
                         distanceInMiles: self.runSession.prevRunDistance,
                         calories: 0,
-                        activityType: self.activityTypeSelected,
+                        activityType: self.runSession.activityType,
                         routeLocations: locations,
                         elevationGainMeters: self.runSession.prevRunElevationGain
                     ) { _, _ in }
@@ -927,6 +942,7 @@ struct RunInfoView: View {
         runSession.isSaving = false
         runSession.runLocations = []
         hasSubmittedLeaderboardEntry = false
+        RunPersistenceService.clear()
     }
 
     private func calculateMilesPerMinute(distance: Double, time: Double) -> String {

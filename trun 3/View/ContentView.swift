@@ -10,6 +10,8 @@ import SwiftData
 import MapKit
 import FirebaseFirestore
 import UniformTypeIdentifiers
+import HealthKit
+import CoreLocation
 
 // Define GPX Document structure for FileExporter
 struct GPXDocument: FileDocument {
@@ -45,6 +47,9 @@ struct ContentView: View {
     @StateObject private var uploadService = SharedRouteService()
     @StateObject var runSession = RunSessionManager()
     @State var inRunningMode: Bool = false
+    @Environment(\.scenePhase) var scenePhase
+    @State private var showRecoveryAlert = false
+    @State private var recoveredSnapshot: RunSnapshot?
 
     let db = Firestore.firestore()
     
@@ -211,6 +216,19 @@ struct ContentView: View {
                     profileService.fetchProfileImageURL()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         requestHealthKitAccess()
+                    }
+                    // Clean up any ghost runner entries from prior crashes
+                    liveRunService.cleanupOwnStaleEntries()
+                    // Check for interrupted run
+                    if let snapshot = RunPersistenceService.load() {
+                        recoveredSnapshot = snapshot
+                        showRecoveryAlert = true
+                    }
+                }
+                .onChange(of: scenePhase) { newPhase in
+                    if newPhase == .background && inRunningMode {
+                        let snapshot = runSession.buildSnapshot(locationManager: locationManager)
+                        RunPersistenceService.save(snapshot)
                     }
                 }
                 .onChange(of: selectedRoute) { _ in
@@ -761,6 +779,30 @@ struct ContentView: View {
                     }
                 }
             }
+            .alert("Run Interrupted", isPresented: $showRecoveryAlert) {
+                Button("Resume Run") {
+                    if let snapshot = recoveredSnapshot {
+                        resumeInterruptedRun(snapshot)
+                    }
+                }
+                Button("Save as Completed") {
+                    if let snapshot = recoveredSnapshot {
+                        // Clean up any lingering Firebase entry from the crashed session
+                        liveRunService.stopSession()
+                        liveRunService.cleanupOwnStaleEntries()
+                        saveInterruptedRun(snapshot)
+                    }
+                }
+                Button("Discard", role: .destructive) {
+                    RunPersistenceService.clear()
+                    // Clean up any lingering Firebase entry from the crashed session
+                    liveRunService.stopSession()
+                    liveRunService.cleanupOwnStaleEntries()
+                    recoveredSnapshot = nil
+                }
+            } message: {
+                Text("Your last run was interrupted. Would you like to resume or save what you have?")
+            }
         }
 
     func requestHealthKitAccess() {
@@ -775,7 +817,92 @@ struct ContentView: View {
                 }
             }
         }
-    }    
+    }
+
+    // MARK: - Run Recovery
+
+    /// Resume an interrupted run in paused state so the user can continue.
+    private func resumeInterruptedRun(_ snapshot: RunSnapshot) {
+        let locations = snapshot.locations.map { $0.toCLLocation() }
+
+        // Treat time while app was dead as paused time
+        let deadTime = Date().timeIntervalSince1970 - snapshot.savedAt
+
+        runSession.runStartDate = Date(timeIntervalSince1970: snapshot.runStartDate)
+        runSession.pausedDuration = snapshot.pausedDuration + deadTime
+        runSession.isPaused = true
+        runSession.isTimerPaused = true
+        runSession.pauseStartDate = Date()
+        runSession.runData.startTime = Date(timeIntervalSince1970: snapshot.runStartDate)
+        runSession.activityType = HKWorkoutActivityType(rawValue: snapshot.activityTypeRawValue) ?? .running
+        runSession.currentTimer = snapshot.currentTimer
+        runSession.isRunDone = false
+
+        // Restore location state
+        locationManager.resumeRunTracking(
+            existingLocations: locations,
+            existingDistance: snapshot.distance,
+            existingElevation: snapshot.elevationGain
+        )
+
+        // Start a new workout session for continued background protection
+        healthStore.startWorkoutSession(activityType: runSession.activityType)
+
+        // Restart multiplayer session if a route is selected
+        liveRunService.cleanupOwnStaleEntries()
+        if let route = selectedRoute {
+            let routeCoords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL) ?? []
+            liveRunService.startSession(routeID: route.id, routeCoordinates: routeCoords)
+        }
+
+        inRunningMode = true
+        runningMenuHeight = .height(250)
+        recoveredSnapshot = nil
+
+        print("[Recovery] Resumed interrupted run — \(locations.count) locations, \(String(format: "%.2f", snapshot.distance * 0.000621371)) miles")
+    }
+
+    /// Present an interrupted run as completed for the user to save or discard.
+    private func saveInterruptedRun(_ snapshot: RunSnapshot) {
+        let locations = snapshot.locations.map { $0.toCLLocation() }
+        let distanceMiles = snapshot.distance * 0.000621371
+        let totalMinutes = snapshot.currentTimer / 60.0
+        let minute = Int(snapshot.currentTimer / 60)
+        let seconds = String(format: "%02d", Int(snapshot.currentTimer) % 60)
+
+        let activityType = HKWorkoutActivityType(rawValue: snapshot.activityTypeRawValue) ?? .running
+
+        // Calculate pace
+        let pace: String
+        if activityType == .cycling {
+            let hours = totalMinutes / 60.0
+            pace = hours > 0 ? String(format: "%.1f", distanceMiles / hours) : "0.0"
+        } else {
+            if distanceMiles > 0 {
+                let minPerMile = totalMinutes / distanceMiles
+                let wholeMin = Int(minPerMile)
+                let secs = Int((minPerMile - Double(wholeMin)) * 60)
+                pace = String(format: "%d:%02d", wholeMin, secs)
+            } else {
+                pace = "0:00"
+            }
+        }
+
+        runSession.prevRunDistance = distanceMiles
+        runSession.prevRunMinute = minute
+        runSession.prevRunSecond = seconds
+        runSession.prevRunMinPerMile = pace
+        runSession.prevRunElevationGain = snapshot.elevationGain
+        runSession.runLocations = locations
+        runSession.runData.startTime = Date(timeIntervalSince1970: snapshot.runStartDate)
+        runSession.activityType = activityType
+        runSession.isRunDone = true
+
+        runningMenuHeight = .height(250)
+        recoveredSnapshot = nil
+
+        print("[Recovery] Presenting interrupted run for save — \(String(format: "%.2f", distanceMiles)) miles, \(minute):\(seconds)")
+    }
     
     private func uploadGPXToFirestore(from url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }

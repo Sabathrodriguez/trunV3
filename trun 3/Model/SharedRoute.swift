@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct SharedRoute: Identifiable {
+struct SharedRoute: Identifiable, Codable {
     var id: String
     var name: String
     var distanceMiles: Double

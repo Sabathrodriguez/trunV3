@@ -42,7 +42,8 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.pausesLocationUpdatesAutomatically = false
-        
+        locationManager.showsBackgroundLocationIndicator = true
+
         requestAuthorization()
     }
 
@@ -144,6 +145,31 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         print("[LocationManager] Run tracking stopped — captured \(runLocations.count) locations, elevation gain: \(String(format: "%.1f", elevationGain))m")
         // Restore distance filter for normal map usage (saves battery)
         locationManager.distanceFilter = 10
+    }
+
+    /// Resume run tracking from a recovered snapshot without resetting existing data.
+    func resumeRunTracking(existingLocations: [CLLocation], existingDistance: Double, existingElevation: Double) {
+        runLocations = existingLocations
+        distance = existingDistance
+        elevationGain = existingElevation
+        previousLocation = existingLocations.last
+        isRunActive = true
+        locationManager.distanceFilter = kCLDistanceFilterNone
+        print("[LocationManager] Run tracking resumed — restored \(existingLocations.count) locations, \(String(format: "%.1f", existingElevation))m elevation")
+
+        // Restart altimeter (continues accumulating from restored elevationGain)
+        if CMAltimeter.isRelativeAltitudeAvailable() {
+            lastRelativeAltitude = nil
+            altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
+                guard let self = self, let data = data else { return }
+                let currentAltitude = data.relativeAltitude.doubleValue
+                if let lastAlt = self.lastRelativeAltitude {
+                    let delta = currentAltitude - lastAlt
+                    if delta > 0 { self.elevationGain += delta }
+                }
+                self.lastRelativeAltitude = currentAltitude
+            }
+        }
     }
 
     // MARK: - GPX Recording
