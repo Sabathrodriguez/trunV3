@@ -22,6 +22,7 @@ struct RouteGeneratorView: View {
     @State private var showFileExporter: Bool = false
     @State private var gpxDocumentToExport: GPXDocument?
     @State private var exportFileName: String = "route"
+    @State private var remainingGenerations: Int = RouteRateLimitService.remainingToday
 
     var body: some View {
         NavigationView {
@@ -76,6 +77,17 @@ struct RouteGeneratorView: View {
                 }
                 .padding(.horizontal)
 
+                HStack {
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(remainingGenerations) of \(RouteRateLimitService.dailyLimit) route generations remaining today")
+                        .font(.caption)
+                        .foregroundColor(remainingGenerations > 0 ? .secondary : .red)
+                    Spacer()
+                }
+                .padding(.horizontal)
+
                 Button(action: { generateRoute() }) {
                     HStack {
                         if generationService.isGenerating {
@@ -88,11 +100,11 @@ struct RouteGeneratorView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(userInput.isEmpty || generationService.isGenerating ? Color.gray : activityColor)
+                    .background(userInput.isEmpty || generationService.isGenerating || remainingGenerations <= 0 ? Color.gray : activityColor)
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
-                .disabled(userInput.isEmpty || generationService.isGenerating)
+                .disabled(userInput.isEmpty || generationService.isGenerating || remainingGenerations <= 0)
                 .padding(.horizontal)
 
                 if !generationService.routeOptions.isEmpty {
@@ -114,8 +126,9 @@ struct RouteGeneratorView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(UIColor.secondarySystemBackground))
+                        .background(remainingGenerations <= 0 ? Color.gray : Color(UIColor.secondarySystemBackground))
                         .cornerRadius(12)
+                        .disabled(remainingGenerations <= 0)
 
                         Button("Save Route") {
                             routeName = ""
@@ -144,6 +157,9 @@ struct RouteGeneratorView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { isPresented = false }
                 }
+            }
+            .onAppear {
+                remainingGenerations = RouteRateLimitService.remainingToday
             }
             .alert("Error", isPresented: $showError) {
                 Button("OK", role: .cancel) {}
@@ -258,6 +274,14 @@ struct RouteGeneratorView: View {
             showError = true
             return
         }
+
+        guard RouteRateLimitService.canGenerate else {
+            errorMessage = "You've used all \(RouteRateLimitService.dailyLimit) route generations for today. Try again tomorrow!"
+            showError = true
+            return
+        }
+        RouteRateLimitService.recordGeneration()
+        remainingGenerations = RouteRateLimitService.remainingToday
 
         Task {
             do {
