@@ -21,6 +21,7 @@ class RouteGenerationService: ObservableObject {
     private let nlpParser = RouteNLPParser()
     private let waypointGenerator = WaypointGenerator()
     private let googleRoutesService = GoogleRoutesService()
+    private let apiBudgetService = APIBudgetService.shared
 
     enum GenerationError: LocalizedError {
         case noUserLocation
@@ -84,51 +85,83 @@ class RouteGenerationService: ObservableObject {
             )
 
             var options: [RouteOption] = []
+            let googleEnabled = await apiBudgetService.isGoogleRoutesEnabled()
 
             if request.activityType == .cycling {
-                // Cycling: Google Routes only (with distance-accuracy loop)
-                await MainActor.run {
-                    generationProgress = "Calculating cycling route..."
-                }
+                if googleEnabled {
+                    // Cycling: Google Routes (with distance-accuracy loop)
+                    await MainActor.run {
+                        generationProgress = "Calculating cycling route..."
+                    }
 
-                if let route = await fetchGoogleRoute(
-                    waypoints: waypoints,
-                    activityType: .cycling,
-                    targetDistanceMiles: request.targetDistanceMiles,
-                    userLocation: userLocation
-                ) {
-                    options.append(route)
+                    if let route = await fetchGoogleRoute(
+                        waypoints: waypoints,
+                        activityType: .cycling,
+                        targetDistanceMiles: request.targetDistanceMiles,
+                        userLocation: userLocation
+                    ) {
+                        options.append(route)
+                    }
+                } else {
+                    // Google disabled — fall back to Apple Maps walking as approximation
+                    await MainActor.run {
+                        generationProgress = "Calculating approximate cycling route..."
+                    }
+
+                    if let route = await fetchAppleMapsRoute(
+                        waypoints: waypoints,
+                        request: request,
+                        userLocation: userLocation,
+                        activityLabel: activityLabel,
+                        sourceLabel: "Apple Maps (approx.)"
+                    ) {
+                        options.append(route)
+                    }
                 }
             } else {
-                // Walking/Running: fetch from both APIs in parallel
-                await MainActor.run {
-                    generationProgress = "Calculating routes from Apple Maps & Google..."
-                }
+                if googleEnabled {
+                    // Walking/Running: fetch from both APIs in parallel
+                    await MainActor.run {
+                        generationProgress = "Calculating routes from Apple Maps & Google..."
+                    }
 
-                // Apple Maps with distance-accuracy loop
-                async let appleResult = fetchAppleMapsRoute(
-                    waypoints: waypoints,
-                    request: request,
-                    userLocation: userLocation,
-                    activityLabel: activityLabel
-                )
+                    async let appleResult = fetchAppleMapsRoute(
+                        waypoints: waypoints,
+                        request: request,
+                        userLocation: userLocation,
+                        activityLabel: activityLabel
+                    )
 
-                // Google Routes (with distance-accuracy loop)
-                async let googleResult = fetchGoogleRoute(
-                    waypoints: waypoints,
-                    activityType: request.activityType,
-                    targetDistanceMiles: request.targetDistanceMiles,
-                    userLocation: userLocation
-                )
+                    async let googleResult = fetchGoogleRoute(
+                        waypoints: waypoints,
+                        activityType: request.activityType,
+                        targetDistanceMiles: request.targetDistanceMiles,
+                        userLocation: userLocation
+                    )
 
-                let apple = await appleResult
-                let google = await googleResult
+                    let apple = await appleResult
+                    let google = await googleResult
 
-                if let apple = apple {
-                    options.append(apple)
-                }
-                if let google = google {
-                    options.append(google)
+                    if let apple = apple {
+                        options.append(apple)
+                    }
+                    if let google = google {
+                        options.append(google)
+                    }
+                } else {
+                    // Google disabled — Apple Maps only
+                    await MainActor.run {
+                        generationProgress = "Calculating route from Apple Maps..."
+                    }
+
+                    if let route = await fetchAppleMapsRoute(
+                        waypoints: waypoints,
+                        request: request,
+                        userLocation: userLocation,
+                        activityLabel: activityLabel
+                    ) {
+                        options.append(route)
+                    }
                 }
             }
 
@@ -157,7 +190,8 @@ class RouteGenerationService: ObservableObject {
         waypoints: [CLLocationCoordinate2D],
         request: RouteRequest,
         userLocation: CLLocationCoordinate2D,
-        activityLabel: String
+        activityLabel: String,
+        sourceLabel: String = "Apple Maps"
     ) async -> RouteOption? {
         do {
             var currentWaypoints = waypoints
@@ -190,7 +224,7 @@ class RouteGenerationService: ObservableObject {
             try GPXValidator.validateCoordinates(finalCoordinates)
 
             return RouteOption(
-                source: "Apple Maps",
+                source: sourceLabel,
                 coordinates: finalCoordinates,
                 gpxString: gpx,
                 distanceMiles: finalDistance

@@ -1,5 +1,10 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onMessagePublished } = require("firebase-functions/v2/pubsub");
 const { defineSecret } = require("firebase-functions/params");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { initializeApp } = require("firebase-admin/app");
+
+initializeApp();
 
 const stravaClientId = defineSecret("STRAVA_CLIENT_ID");
 const stravaClientSecret = defineSecret("STRAVA_CLIENT_SECRET");
@@ -79,3 +84,38 @@ exports.stravaTokenRefresh = onCall(
     };
   }
 );
+
+// Budget alert kill switch — triggered by Google Cloud Budget Pub/Sub notifications
+exports.budgetAlertHandler = onMessagePublished(
+  { topic: "budget-alerts" },
+  async (event) => {
+    const data = event.data.message.json;
+    const costAmount = data.costAmount;
+    const budgetAmount = data.budgetAmount;
+
+    if (costAmount >= budgetAmount) {
+      const db = getFirestore();
+      await db.doc("config/googleApi").set({
+        enabled: false,
+        disabledAt: FieldValue.serverTimestamp(),
+        reason: `Budget threshold reached: $${costAmount} of $${budgetAmount}`,
+      });
+    }
+  }
+);
+
+// Manually re-enable Google Routes API
+exports.reenableGoogleApi = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const db = getFirestore();
+  await db.doc("config/googleApi").set({
+    enabled: true,
+    reenableAt: FieldValue.serverTimestamp(),
+    reenableBy: request.auth.uid,
+  });
+
+  return { success: true };
+});
