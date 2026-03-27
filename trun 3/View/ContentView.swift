@@ -106,7 +106,14 @@ struct ContentView: View {
     
     @StateObject var viewModel: UserLocation = UserLocation()
     
-    var runningMenuHeights = Set([PresentationDetent.height(250), PresentationDetent.height(100), PresentationDetent.large])
+    // With this computed property:
+    var runningMenuHeights: Set<PresentationDetent> {
+        if inRunningMode {
+            return [.height(350), .height(200), .large] // Increased by 100
+        } else {
+            return [.height(250), .height(100), .large]
+        }
+    }
     
     var body: some View {
             ZStack {
@@ -713,8 +720,17 @@ struct ContentView: View {
                     .presentationBackground(.ultraThinMaterial) // Glass effect
                     .interactiveDismissDisabled(true)
                     .onChange(of: runningMenuHeight) { newHeight in
-                        if (newHeight == .height(100) || newHeight == .height(250)) {
+                        if (newHeight == .height(100) || newHeight == .height(200) || newHeight == .height(250) || newHeight == .height(350)) {
                             searchWasClicked = false
+                        }
+                    }
+                    .onChange(of: inRunningMode) { newValue in
+                        if newValue {
+                            if runningMenuHeight == .height(250) { runningMenuHeight = .height(350) }
+                            else if runningMenuHeight == .height(100) { runningMenuHeight = .height(200) }
+                        } else {
+                            if runningMenuHeight == .height(350) { runningMenuHeight = .height(250) }
+                            else if runningMenuHeight == .height(200) { runningMenuHeight = .height(100) }
                         }
                     }
                     .fileExporter(
@@ -856,7 +872,7 @@ struct ContentView: View {
         }
 
         inRunningMode = true
-        runningMenuHeight = .height(250)
+        runningMenuHeight = .height(350)
         recoveredSnapshot = nil
 
         print("[Recovery] Resumed interrupted run — \(locations.count) locations, \(String(format: "%.2f", snapshot.distance * 0.000621371)) miles")

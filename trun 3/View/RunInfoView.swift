@@ -13,6 +13,7 @@ import UIKit
 import Photos
 import UniformTypeIdentifiers
 import HealthKit
+import MediaPlayer
 
 extension HKWorkoutActivityType {
     var name: String {
@@ -131,13 +132,15 @@ struct RunInfoView: View {
     @State private var isPublishing = false
     @State private var hasSubmittedLeaderboardEntry = false
     @StateObject private var publishService = SharedRouteService()
+    
+    @AppStorage("showMusicPlayer") private var showMusicPlayer: Bool = true
 
     private var isCompact: Bool {
-        runningMenuHeight == .height(100)
+        runningMenuHeight == .height(100) || runningMenuHeight == .height(200)
     }
 
     private var isMediumSheet: Bool {
-        runningMenuHeight == .height(250)
+        runningMenuHeight == .height(250) || runningMenuHeight == .height(350)
     }
 
     var body: some View {
@@ -526,6 +529,9 @@ struct RunInfoView: View {
                             .frame(width: 44, height: 44)
                             .background(Circle().fill(runSession.isPaused ? Color.green : Color.yellow))
                     }
+                    if showMusicPlayer {
+                        MusicPlayerView()
+                    }
                 } else {
                 // LIVE METRICS
                 HStack(alignment: .bottom, spacing: 30) {
@@ -665,6 +671,9 @@ struct RunInfoView: View {
                     }
                 }
                 .padding(.bottom, 20)
+                }
+                if showMusicPlayer {
+                    MusicPlayerView()
                 }
                 } // end else (full-size running layout)
             }
@@ -1142,3 +1151,82 @@ struct RunInfoView: View {
 
 }
 
+// MARK: - Music Player View
+struct MusicPlayerView: View {
+    @State private var isPlaying = false
+    @State private var nowPlayingTitle = "Not Playing"
+    @State private var nowPlayingArtist = "Select a song in Apple Music"
+    
+    let player = MPMusicPlayerController.systemMusicPlayer
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(nowPlayingTitle)
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .lineLimit(1)
+                Text(nowPlayingArtist)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            
+            HStack(spacing: 20) {
+                Button(action: { player.skipToPreviousItem() }) {
+                    Image(systemName: "backward.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.primary)
+                }
+                
+                Button(action: {
+                    if isPlaying {
+                        player.pause()
+                    } else {
+                        player.play()
+                    }
+                }) {
+                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.blue)
+                }
+                
+                Button(action: { player.skipToNextItem() }) {
+                    Image(systemName: "forward.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.primary)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(12)
+        .onAppear {
+            player.beginGeneratingPlaybackNotifications()
+            updateNowPlayingInfo()
+            NotificationCenter.default.addObserver(forName: .MPMusicPlayerControllerNowPlayingItemDidChange, object: player, queue: .main) { _ in
+                updateNowPlayingInfo()
+            }
+            NotificationCenter.default.addObserver(forName: .MPMusicPlayerControllerPlaybackStateDidChange, object: player, queue: .main) { _ in
+                updateNowPlayingInfo()
+            }
+        }
+        .onDisappear {
+            player.endGeneratingPlaybackNotifications()
+            NotificationCenter.default.removeObserver(self, name: .MPMusicPlayerControllerNowPlayingItemDidChange, object: player)
+            NotificationCenter.default.removeObserver(self, name: .MPMusicPlayerControllerPlaybackStateDidChange, object: player)
+        }
+    }
+    
+    private func updateNowPlayingInfo() {
+        if let item = player.nowPlayingItem {
+            nowPlayingTitle = item.title ?? "Unknown Title"
+            nowPlayingArtist = item.artist ?? "Unknown Artist"
+        } else {
+            nowPlayingTitle = "Not Playing"
+            nowPlayingArtist = "Select a song in Apple Music"
+        }
+        isPlaying = player.playbackState == .playing
+    }
+}

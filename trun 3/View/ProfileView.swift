@@ -18,6 +18,8 @@ struct ProfileView: View {
     @State private var selectedItem: PhotosPickerItem?
     @State private var errorMessage: String?
     @ObservedObject private var stravaAuth = StravaAuthService.shared
+    
+    @AppStorage("showMusicPlayer") private var showMusicPlayer: Bool = true
 
     private var userEmail: String {
         Auth.auth().currentUser?.email ?? "No email"
@@ -170,6 +172,17 @@ struct ProfileView: View {
                     .padding()
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(12)
+            }
+            .padding(.horizontal)
+
+            Section(header: Text("Run Settings")) {
+                Toggle(isOn: $showMusicPlayer) {
+                    HStack {
+                        Image(systemName: "music.note")
+                            .foregroundColor(.blue)
+                            Text("Show Apple Music Player")
+                        }
+                }
             }
             .padding(.horizontal)
 
