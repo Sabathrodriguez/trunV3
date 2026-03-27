@@ -132,15 +132,67 @@ struct RunInfoView: View {
     @State private var hasSubmittedLeaderboardEntry = false
     @StateObject private var publishService = SharedRouteService()
 
+    private var isCompact: Bool {
+        runningMenuHeight == .height(100)
+    }
+
+    private var isMediumSheet: Bool {
+        runningMenuHeight == .height(250)
+    }
+
     var body: some View {
         let twoDecimalPlaceRun = String(format: "%.2f", locationManager.convertToMiles())
         let minute = Int(runSession.currentTimer/60)
         let seconds = String(format: "%02d", Int(runSession.currentTimer) % 60)
 
-        VStack(spacing: 20) {
+        VStack(spacing: isCompact ? 10 : 20) {
 
             // --- STATE 1: RUN FINISHED SUMMARY ---
             if runSession.isRunDone {
+                if isMediumSheet {
+                    // COMPACT SUMMARY (250pt) — 2x2 grid + small buttons
+                    VStack(spacing: 10) {
+                        HStack(spacing: 16) {
+                            CompactStat(label: "DISTANCE", value: String(format: "%.2f mi", runSession.prevRunDistance))
+                            CompactStat(label: "TIME", value: "\(runSession.prevRunMinute):\(runSession.prevRunSecond)")
+                        }
+                        HStack(spacing: 16) {
+                            CompactStat(label: runSession.activityType == .cycling ? "SPEED" : "PACE", value: runSession.activityType == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile)/mi")
+                            CompactStat(label: "ELEVATION", value: String(format: "%.0f ft", runSession.prevRunElevationGain * 3.28084))
+                        }
+
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                 clearRunInformation()
+                            }) {
+                                Text("Discard")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(Color.red.opacity(0.15))
+                                    .foregroundColor(.red)
+                                    .cornerRadius(10)
+                            }
+
+                            Button(action: {
+                                saveRunAction()
+                            }) {
+                                Text(runSession.isSaving ? "Saving..." : "Save Run")
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(runSession.isSaving ? Color.blue.opacity(0.5) : Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                            }
+                            .disabled(runSession.isSaving)
+                        }
+                    }
+                    .padding(.horizontal)
+                } else {
+                // FULL SUMMARY (large sheet)
                 VStack(spacing: 25) {
                     VStack(spacing: 15) {
                         SummaryRow(icon: "map.fill", title: "Distance", value: String(format: "%.2f mi", runSession.prevRunDistance))
@@ -230,9 +282,27 @@ struct RunInfoView: View {
                     }
                 }
                 .padding(.horizontal)
+                }
 
             // --- STATE 2: IDLE (Pre-Run) ---
             } else if !inRunningMode {
+                if isCompact {
+                    // COMPACT (100pt) — just a small GO button
+                    Button(action: {
+                        startRun()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 50, height: 50)
+                                .shadow(color: .green.opacity(0.4), radius: 6, x: 0, y: 3)
+
+                            Text("GO")
+                                .font(.system(.subheadline, design: .rounded).bold())
+                                .foregroundColor(.white)
+                        }
+                    }
+                } else {
                 // Search Bar
                 if searchWasClicked {
                     HStack {
@@ -369,7 +439,7 @@ struct RunInfoView: View {
                         }
                     }
                     .padding()
-                    
+
 
                     Picker("Select an option", selection: $runSession.activityType) {
                         ForEach(activityTypeArray, id: \.self) { option in
@@ -377,12 +447,86 @@ struct RunInfoView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .padding()                    
+                    .padding()
                 }
                 .padding(.horizontal)
+                } // end else (full idle layout)
 
             // --- STATE 3: RUNNING (Active) ---
             } else {
+                if isCompact {
+                    // COMPACT LIVE METRICS (250pt) — horizontal stats only
+                    HStack(spacing: 20) {
+                        VStack(spacing: 2) {
+                            Text("DISTANCE")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Text("\(twoDecimalPlaceRun) mi")
+                                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        }
+
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.3))
+                            .frame(width: 1, height: 36)
+
+                        VStack(spacing: 2) {
+                            Text("TIME")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Text("\(minute):\(seconds)")
+                                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                        }
+
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.3))
+                            .frame(width: 1, height: 36)
+
+                        VStack(spacing: 2) {
+                            Text(runSession.activityType == .cycling ? "SPEED" : "PACE")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Text(runSession.activityType == .cycling ? "\(runSession.prevRunMinPerMile) mph" : "\(runSession.prevRunMinPerMile)/mi")
+                                .font(.system(size: 18, weight: .medium, design: .rounded))
+                        }
+                    }
+                    .padding(.vertical, 8)
+
+                    // Compact pause button
+                    Button(action: {
+                        if runSession.isPaused {
+                            if let pauseStart = runSession.pauseStartDate {
+                                runSession.pausedDuration += Date().timeIntervalSince(pauseStart)
+                            }
+                            runSession.pauseStartDate = nil
+                            runSession.isPaused = false
+                            locationManager.startTracking()
+                            runSession.isTimerPaused = false
+                            runSession.updateLiveActivity(
+                                distanceMiles: locationManager.convertToMiles(),
+                                pace: runSession.prevRunMinPerMile,
+                                elapsedSeconds: runSession.currentTimer,
+                                isPaused: false
+                            )
+                        } else {
+                            runSession.isPaused = true
+                            locationManager.pauseTracking()
+                            runSession.isTimerPaused = true
+                            runSession.pauseStartDate = Date()
+                            runSession.updateLiveActivity(
+                                distanceMiles: locationManager.convertToMiles(),
+                                pace: runSession.prevRunMinPerMile,
+                                elapsedSeconds: runSession.currentTimer,
+                                isPaused: true
+                            )
+                        }
+                    }) {
+                        Image(systemName: runSession.isPaused ? "play.fill" : "pause.fill")
+                            .font(.title3)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(runSession.isPaused ? Color.green : Color.yellow))
+                    }
+                } else {
                 // LIVE METRICS
                 HStack(alignment: .bottom, spacing: 30) {
                     VStack(alignment: .leading) {
@@ -416,7 +560,7 @@ struct RunInfoView: View {
                 }
                 .padding(.top)
 
-                // CONTROLS (Pause/Stop/Camera) - hidden when compact (250pt)
+                // CONTROLS (Pause/Stop/Camera) - hidden when compact
                 if runningMenuHeight != .height(100) {
                 HStack(spacing: 40) {
                     // Camera
@@ -522,6 +666,7 @@ struct RunInfoView: View {
                 }
                 .padding(.bottom, 20)
                 }
+                } // end else (full-size running layout)
             }
         }
         .padding()
@@ -651,6 +796,17 @@ struct RunInfoView: View {
             Spacer()
             Text(value).bold()
         }
+    }
+
+    func CompactStat(label: String, value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.system(size: 16, weight: .heavy, design: .rounded))
+        }
+        .frame(maxWidth: .infinity)
     }
 
     func startRun() {
