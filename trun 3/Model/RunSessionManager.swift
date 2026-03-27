@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import CoreLocation
 import HealthKit
+import ActivityKit
 
 class RunSessionManager: ObservableObject {
     @Published var runData: Run = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
@@ -29,6 +30,74 @@ class RunSessionManager: ObservableObject {
 
     // Captured GPS locations for HealthKit route and Strava export
     var runLocations: [CLLocation] = []
+
+    // Live Activity
+    private var currentActivity: Activity<RunActivityAttributes>?
+
+    // MARK: - Live Activity
+
+    func startLiveActivity(activityType: HKWorkoutActivityType, isRouteRun: Bool) {
+        let authInfo = ActivityAuthorizationInfo()
+        print("[RunSessionManager] Live Activities enabled: \(authInfo.areActivitiesEnabled)")
+
+        guard authInfo.areActivitiesEnabled else {
+            print("[RunSessionManager] Live Activities not enabled — check Settings → trun 3 → Live Activities")
+            return
+        }
+
+        let attributes = RunActivityAttributes(
+            activityType: activityType.name,
+            isRouteRun: isRouteRun
+        )
+        let initialState = RunActivityAttributes.ContentState(
+            distanceMiles: 0,
+            pace: activityType == .cycling ? "0.0" : "0:00",
+            elapsedSeconds: 0,
+            isPaused: false
+        )
+
+        do {
+            let activity = try Activity.request(
+                attributes: attributes,
+                content: .init(state: initialState, staleDate: nil)
+            )
+            currentActivity = activity
+            print("[RunSessionManager] Live Activity started successfully, id: \(activity.id)")
+        } catch {
+            print("[RunSessionManager] Failed to start Live Activity: \(error)")
+        }
+    }
+
+    func updateLiveActivity(distanceMiles: Double, pace: String, elapsedSeconds: Double, isPaused: Bool) {
+        guard let activity = currentActivity else { return }
+
+        let updatedState = RunActivityAttributes.ContentState(
+            distanceMiles: distanceMiles,
+            pace: pace,
+            elapsedSeconds: elapsedSeconds,
+            isPaused: isPaused
+        )
+
+        Task {
+            await activity.update(.init(state: updatedState, staleDate: nil))
+        }
+    }
+
+    func endLiveActivity() {
+        guard let activity = currentActivity else { return }
+
+        let finalState = RunActivityAttributes.ContentState(
+            distanceMiles: prevRunDistance,
+            pace: prevRunMinPerMile,
+            elapsedSeconds: currentTimer,
+            isPaused: false
+        )
+
+        Task {
+            await activity.end(.init(state: finalState, staleDate: nil), dismissalPolicy: .default)
+        }
+        currentActivity = nil
+    }
 
     /// Build a snapshot of the current run state for persistence.
     func buildSnapshot(locationManager: LocationManager) -> RunSnapshot {

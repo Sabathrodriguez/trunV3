@@ -468,6 +468,12 @@ struct RunInfoView: View {
                             runSession.isPaused = false
                             locationManager.startTracking()
                             runSession.isTimerPaused = false
+                            runSession.updateLiveActivity(
+                                distanceMiles: locationManager.convertToMiles(),
+                                pace: runSession.prevRunMinPerMile,
+                                elapsedSeconds: runSession.currentTimer,
+                                isPaused: false
+                            )
                         }) {
                             Image(systemName: "play.fill")
                                 .font(.title)
@@ -483,6 +489,12 @@ struct RunInfoView: View {
                             locationManager.pauseTracking()
                             runSession.isTimerPaused = true
                             runSession.pauseStartDate = Date()
+                            runSession.updateLiveActivity(
+                                distanceMiles: locationManager.convertToMiles(),
+                                pace: runSession.prevRunMinPerMile,
+                                elapsedSeconds: runSession.currentTimer,
+                                isPaused: true
+                            )
                         }) {
                             ZStack {
                                 Circle()
@@ -517,13 +529,19 @@ struct RunInfoView: View {
             if !runSession.isTimerPaused {
                 runSession.currentTimer = Date().timeIntervalSince(runSession.runStartDate) - runSession.pausedDuration
                 let tick = Int(runSession.currentTimer * 10)
-                // Update pace every 3 seconds
+                // Update pace and Live Activity every 3 seconds
                 if tick % 30 == 0 {
                     if runSession.activityType == .cycling {
                         runSession.prevRunMinPerMile = calculateMPH(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
                     } else {
                         runSession.prevRunMinPerMile = calculateMilesPerMinute(distance: locationManager.convertToMiles(), time: runSession.currentTimer / 60)
                     }
+                    runSession.updateLiveActivity(
+                        distanceMiles: locationManager.convertToMiles(),
+                        pace: runSession.prevRunMinPerMile,
+                        elapsedSeconds: runSession.currentTimer,
+                        isPaused: false
+                    )
                 }
                 // Publish location to Firebase every 5 seconds
                 if tick % 50 == 0, inRunningMode, let loc = locationManager.location {
@@ -652,6 +670,9 @@ struct RunInfoView: View {
         // Start HKWorkoutSession for background protection
         healthStore.startWorkoutSession(activityType: runSession.activityType)
 
+        // Start Live Activity
+        runSession.startLiveActivity(activityType: runSession.activityType, isRouteRun: selectedRoute != nil)
+
         // Save initial snapshot so even a very early crash is recoverable
         let snapshot = runSession.buildSnapshot(locationManager: locationManager)
         RunPersistenceService.save(snapshot)
@@ -695,8 +716,9 @@ struct RunInfoView: View {
         runSession.isRunDone = true
         runningMenuHeight = .height(250)
 
-        // End workout session and clear persistence snapshot
+        // End workout session, Live Activity, and clear persistence snapshot
         healthStore.endWorkoutSession()
+        runSession.endLiveActivity()
         RunPersistenceService.clear()
 
         // Stop multiplayer session
