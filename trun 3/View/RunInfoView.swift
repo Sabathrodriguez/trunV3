@@ -718,7 +718,7 @@ struct RunInfoView: View {
                 runSession.runData = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
             }
         }
-        .sheet(isPresented: $isImagePickerPresented) {
+        .fullScreenCover(isPresented: $isImagePickerPresented) {
             ImagePicker(sourceType: .camera) { image in
                 if let image = image { saveImageToPhotoLibrary(image: image) }
             }

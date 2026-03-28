@@ -71,7 +71,7 @@ struct ContentView: View {
     
     // this will need to be updated to retrieve actual run values
     @State var runTypeDict: [Pace: Double] = [Pace.Average: 1, Pace.Current: 2, Pace.CurrentMile: 3]
-    @State var showSheet: Bool = true
+    @State var showSheet: Bool = false
     @State var runningMenuHeight: PresentationDetent = PresentationDetent.height(250)
     @State var searchWasClicked: Bool = false
     
@@ -208,16 +208,6 @@ struct ContentView: View {
                     MapCompass()
                 }
                 .edgesIgnoringSafeArea(.all)
-                .sheet(isPresented: $showRouteGenerator) {
-                    if #available(iOS 26.0, *) {
-                        RouteGeneratorView(
-                            routes: $routes,
-                            selectedRoute: $selectedRoute,
-                            isPresented: $showRouteGenerator,
-                            userLocation: viewModel.locationManager?.location?.coordinate
-                        )
-                    }
-                }
                 .onAppear {
                     viewModel.checkIfLocationServicesEnabled()
                     profileService.fetchProfileImageURL()
@@ -226,7 +216,12 @@ struct ContentView: View {
                     }
                     // Clean up any ghost runner entries from prior crashes
                     liveRunService.cleanupOwnStaleEntries()
-                    // Check for interrupted run
+                    // Present the main sheet after the view hierarchy is ready
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showSheet = true
+                    }
+                    // Check for interrupted run — the alert is inside the sheet
+                    // content, so it presents from the sheet controller (no collision)
                     if let snapshot = RunPersistenceService.load() {
                         recoveredSnapshot = snapshot
                         showRecoveryAlert = true
@@ -236,6 +231,12 @@ struct ContentView: View {
                     if newPhase == .background && inRunningMode {
                         let snapshot = runSession.buildSnapshot(locationManager: locationManager)
                         RunPersistenceService.save(snapshot)
+                    }
+                    // Restore the main sheet if it was lost during a background cycle
+                    if newPhase == .active && !showSheet {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            showSheet = true
+                        }
                     }
                 }
                 .onChange(of: selectedRoute) { _ in
@@ -623,15 +624,6 @@ struct ContentView: View {
                                             .background(Color.blue)
                                             .cornerRadius(12)
                                     }
-                                    .fileImporter(
-                                        isPresented: $isFileImporterPresented,
-                                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
-                                        allowsMultipleSelection: false
-                                    ) { result in
-                                        if case .success(let urls) = result, let url = urls.first {
-                                            importGPX(from: url)
-                                        }
-                                    }
 
                                     // Upload GPX to Firestore
                                     Button(action: { isUploadImporterPresented = true }) {
@@ -643,15 +635,6 @@ struct ContentView: View {
                                             .padding(.vertical, 14)
                                             .background(Color.green)
                                             .cornerRadius(12)
-                                    }
-                                    .fileImporter(
-                                        isPresented: $isUploadImporterPresented,
-                                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
-                                        allowsMultipleSelection: false
-                                    ) { result in
-                                        if case .success(let urls) = result, let url = urls.first {
-                                            uploadGPXToFirestore(from: url)
-                                        }
                                     }
 
                                     // Record/Save Button
@@ -733,17 +716,6 @@ struct ContentView: View {
                             else if runningMenuHeight == .height(200) { runningMenuHeight = .height(100) }
                         }
                     }
-                    .fileExporter(
-                        isPresented: $isFileExporterPresented,
-                        document: gpxDocument,
-                        contentType: UTType(filenameExtension: "gpx") ?? .xml,
-                        defaultFilename: "MyRun.gpx"
-                    ) { result in
-                        // After file export completes (saved or cancelled), prompt for route name
-                        if !pendingGPXString.isEmpty {
-                            // showRouteNamePrompt = true
-                        }
-                    }
                     .alert("Name Your Route", isPresented: $showRouteNamePrompt) {
                         TextField("Route name", text: $routeName)
                         Button("Share") {
@@ -774,6 +746,28 @@ struct ContentView: View {
                     } message: {
                         Text(alertDetails)
                     }
+                    .alert("Run Interrupted", isPresented: $showRecoveryAlert) {
+                        Button("Resume Run") {
+                            if let snapshot = recoveredSnapshot {
+                                resumeInterruptedRun(snapshot)
+                            }
+                        }
+                        Button("Save as Completed") {
+                            if let snapshot = recoveredSnapshot {
+                                liveRunService.stopSession()
+                                liveRunService.cleanupOwnStaleEntries()
+                                saveInterruptedRun(snapshot)
+                            }
+                        }
+                        Button("Discard", role: .destructive) {
+                            RunPersistenceService.clear()
+                            liveRunService.stopSession()
+                            liveRunService.cleanupOwnStaleEntries()
+                            recoveredSnapshot = nil
+                        }
+                    } message: {
+                        Text("Your last run was interrupted. Would you like to resume or save what you have?")
+                    }
                 }
             }
             .overlay {
@@ -795,29 +789,43 @@ struct ContentView: View {
                     }
                 }
             }
-            .alert("Run Interrupted", isPresented: $showRecoveryAlert) {
-                Button("Resume Run") {
-                    if let snapshot = recoveredSnapshot {
-                        resumeInterruptedRun(snapshot)
-                    }
+            .fullScreenCover(isPresented: $showRouteGenerator) {
+                if #available(iOS 26.0, *) {
+                    RouteGeneratorView(
+                        routes: $routes,
+                        selectedRoute: $selectedRoute,
+                        isPresented: $showRouteGenerator,
+                        userLocation: viewModel.locationManager?.location?.coordinate
+                    )
                 }
-                Button("Save as Completed") {
-                    if let snapshot = recoveredSnapshot {
-                        // Clean up any lingering Firebase entry from the crashed session
-                        liveRunService.stopSession()
-                        liveRunService.cleanupOwnStaleEntries()
-                        saveInterruptedRun(snapshot)
-                    }
+            }
+            .fileImporter(
+                isPresented: $isFileImporterPresented,
+                allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    importGPX(from: url)
                 }
-                Button("Discard", role: .destructive) {
-                    RunPersistenceService.clear()
-                    // Clean up any lingering Firebase entry from the crashed session
-                    liveRunService.stopSession()
-                    liveRunService.cleanupOwnStaleEntries()
-                    recoveredSnapshot = nil
+            }
+            .fileImporter(
+                isPresented: $isUploadImporterPresented,
+                allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    uploadGPXToFirestore(from: url)
                 }
-            } message: {
-                Text("Your last run was interrupted. Would you like to resume or save what you have?")
+            }
+            .fileExporter(
+                isPresented: $isFileExporterPresented,
+                document: gpxDocument,
+                contentType: UTType(filenameExtension: "gpx") ?? .xml,
+                defaultFilename: "MyRun.gpx"
+            ) { result in
+                if !pendingGPXString.isEmpty {
+                    // showRouteNamePrompt = true
+                }
             }
         }
 

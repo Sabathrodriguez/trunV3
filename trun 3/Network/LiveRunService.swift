@@ -34,6 +34,7 @@ class LiveRunService: ObservableObject {
 
     private var currentRouteID: String?
     private var currentUID: String? { Auth.auth().currentUser?.uid }
+    private var currentDisplayName: String? { Auth.auth().currentUser?.displayName }
     private var isSessionActive = false
 
     // Heartbeat & staleness
@@ -89,12 +90,15 @@ class LiveRunService: ObservableObject {
         userRef?.onDisconnectRemoveValue()
 
         // Write initial position
-        let initialData: [String: Any] = [
+        var initialData: [String: Any] = [
             "la": 0.0,
             "lo": 0.0,
             "p": 0.0,
             "t": ServerValue.timestamp()
         ]
+        if let name = currentDisplayName, !name.isEmpty {
+            initialData["n"] = name
+        }
         userRef?.setValue(initialData)
 
         // Subscribe to other runners via granular child events
@@ -112,13 +116,16 @@ class LiveRunService: ObservableObject {
     func publishLocation(location: CLLocation, distanceMiles: Double, pace: String) {
         let progress = calculateRouteProgress(currentLocation: location.coordinate)
 
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "la": location.coordinate.latitude,
             "lo": location.coordinate.longitude,
             "p": progress,
             "pa": pace,
             "t": ServerValue.timestamp()
         ]
+        if let name = currentDisplayName, !name.isEmpty {
+            data["n"] = name
+        }
         userRef?.updateChildValues(data)
 
         // Update the local runner entry for the current user

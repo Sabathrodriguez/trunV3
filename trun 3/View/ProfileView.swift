@@ -8,6 +8,7 @@
 import SwiftUI
 import PhotosUI
 import FirebaseAuth
+import FirebaseFirestore
 
 struct ProfileView: View {
     @ObservedObject var profileService: ProfileService
@@ -17,6 +18,11 @@ struct ProfileView: View {
 
     @State private var selectedItem: PhotosPickerItem?
     @State private var errorMessage: String?
+    @State private var newUsername = ""
+    @State private var showUsernameAlert = false
+    @State private var usernameAlertTitle = ""
+    @State private var usernameAlertMessage = ""
+    @State private var isSavingUsername = false
     @ObservedObject private var stravaAuth = StravaAuthService.shared
     
     @AppStorage("showMusicPlayer") private var showMusicPlayer: Bool = true
@@ -48,7 +54,8 @@ struct ProfileView: View {
                 .opacity(0)
             }
             .padding(.horizontal)
-
+            
+            ScrollView {
             // Profile Image
             ZStack {
                 if let urlString = profileService.profileImageURL,
@@ -72,7 +79,7 @@ struct ProfileView: View {
                 } else {
                     placeholderImage
                 }
-
+                
                 if profileService.isUploading {
                     Circle()
                         .fill(.ultraThinMaterial)
@@ -80,7 +87,7 @@ struct ProfileView: View {
                     ProgressView()
                 }
             }
-
+            
             PhotosPicker(selection: $selectedItem, matching: .images) {
                 Text("Change Photo")
                     .font(.subheadline)
@@ -88,7 +95,7 @@ struct ProfileView: View {
                     .foregroundColor(.blue)
             }
             .disabled(profileService.isUploading)
-
+            
             // User Info
             VStack(spacing: 6) {
                 if let username = profileService.username {
@@ -103,7 +110,7 @@ struct ProfileView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-
+            
             if let errorMessage = errorMessage {
                 Text(errorMessage)
                     .font(.caption)
@@ -111,7 +118,43 @@ struct ProfileView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
-
+            
+            // Set Username (shown only when user has no username)
+            if profileService.username == nil {
+                VStack(spacing: 10) {
+                    Divider()
+                    Text("Set a Username")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    HStack {
+                        TextField("Username", text: $newUsername)
+                            .padding(10)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                            .autocapitalization(.none)
+                            .autocorrectionDisabled()
+                        
+                        Button(action: saveNewUsername) {
+                            if isSavingUsername {
+                                ProgressView()
+                                    .frame(width: 60)
+                            } else {
+                                Text("Save")
+                                    .fontWeight(.semibold)
+                                    .frame(width: 60)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .disabled(isSavingUsername)
+                    }
+                    Divider()
+                }
+                .padding(.horizontal)
+            }
+            
             // Strava Connection
             VStack(spacing: 10) {
                 Divider()
@@ -148,7 +191,7 @@ struct ProfileView: View {
                 Divider()
             }
             .padding(.horizontal)
-
+            
             // Database Routes
             Button(action: {
                 isPresented = false
@@ -166,7 +209,7 @@ struct ProfileView: View {
                 .cornerRadius(12)
             }
             .padding(.horizontal)
-
+            
             Button(role: .destructive) {
                 loginManager.logout()
                 isPresented = false
@@ -180,21 +223,26 @@ struct ProfileView: View {
                     .cornerRadius(12)
             }
             .padding(.horizontal)
-
+            
             Section(header: Text("Run Settings")) {
                 Toggle(isOn: $showMusicPlayer) {
                     HStack {
                         Image(systemName: "music.note")
                             .foregroundColor(.blue)
-                            Text("Show Apple Music Player")
-                        }
+                        Text("Show Apple Music Player")
+                    }
                 }
             }
             .padding(.horizontal)
-
+        }
             Spacer()
         }
         .padding(.top, 10)
+        .alert(usernameAlertTitle, isPresented: $showUsernameAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(usernameAlertMessage)
+        }
         .onAppear {
             profileService.fetchProfileImageURL()
         }
@@ -213,6 +261,64 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    private func saveNewUsername() {
+        let trimmed = newUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            usernameAlertTitle = "Invalid Username"
+            usernameAlertMessage = "Username cannot be empty."
+            showUsernameAlert = true
+            return
+        }
+        if trimmed.count < 3 {
+            usernameAlertTitle = "Invalid Username"
+            usernameAlertMessage = "Username must be at least 3 characters."
+            showUsernameAlert = true
+            return
+        }
+        if trimmed.count > 20 {
+            usernameAlertTitle = "Invalid Username"
+            usernameAlertMessage = "Username must be 20 characters or fewer."
+            showUsernameAlert = true
+            return
+        }
+
+        isSavingUsername = true
+        let db = Firestore.firestore()
+        db.collection("users")
+            .whereField("username", isEqualTo: trimmed)
+            .limit(to: 1)
+            .getDocuments { [self] snapshot, error in
+                if let error = error {
+                    DispatchQueue.main.async {
+                        isSavingUsername = false
+                        usernameAlertTitle = "Error"
+                        usernameAlertMessage = error.localizedDescription
+                        showUsernameAlert = true
+                    }
+                    return
+                }
+                let isTaken = !(snapshot?.documents.isEmpty ?? true)
+                if isTaken {
+                    DispatchQueue.main.async {
+                        isSavingUsername = false
+                        usernameAlertTitle = "Username Taken"
+                        usernameAlertMessage = "The username \"\(trimmed)\" is already in use. Please choose a different one."
+                        showUsernameAlert = true
+                    }
+                    return
+                }
+                profileService.saveUsername(trimmed) { result in
+                    isSavingUsername = false
+                    if case .failure(let error) = result {
+                        usernameAlertTitle = "Error"
+                        usernameAlertMessage = error.localizedDescription
+                        showUsernameAlert = true
+                    }
+                }
+            }
     }
 
     private var placeholderImage: some View {

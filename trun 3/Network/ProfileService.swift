@@ -102,6 +102,32 @@ class ProfileService: ObservableObject {
         }
     }
 
+    /// Save a username to Firestore and Firebase Auth displayName.
+    func saveUsername(_ username: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let user = Auth.auth().currentUser else {
+            completion(.failure(ProfileError.notAuthenticated))
+            return
+        }
+
+        let changeRequest = user.createProfileChangeRequest()
+        changeRequest.displayName = username
+        changeRequest.commitChanges { _ in }
+
+        db.collection("users").document(user.uid).setData([
+            "username": username,
+            "updatedAt": FieldValue.serverTimestamp()
+        ], merge: true) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(error))
+                } else {
+                    self?.username = username
+                    completion(.success(()))
+                }
+            }
+        }
+    }
+
     /// Fetch a specific user's profile image URL from Firestore.
     func fetchProfileImageURL(for uid: String, completion: @escaping (String?) -> Void) {
         db.collection("users").document(uid).getDocument { snapshot, error in

@@ -35,7 +35,7 @@ struct Runner: Identifiable, Hashable {
     /// Only 4 fields come from Firebase (la, lo, p, t). Everything else is derived client-side.
     init(id: String, data: [String: Any], routeID: String, runnerIndex: Int) {
         self.id = id
-        self.name = "Runner \(runnerIndex + 1)"
+        self.name = (data["n"] as? String) ?? "Runner \(runnerIndex + 1)"
         self.iconID = ""
         let lat = data["la"] as? Double ?? 0
         let lon = data["lo"] as? Double ?? 0
