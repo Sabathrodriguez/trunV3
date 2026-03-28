@@ -91,8 +91,14 @@ struct ProfileView: View {
 
             // User Info
             VStack(spacing: 6) {
+                if let username = profileService.username {
+                    Text(username)
+                        .font(.title3)
+                        .fontWeight(.bold)
+                }
                 Text(userEmail)
                     .font(.headline)
+                    .foregroundColor(profileService.username != nil ? .secondary : .primary)
                 Text("Member since \(memberSinceText)")
                     .font(.caption)
                     .foregroundColor(.secondary)

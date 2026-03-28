@@ -13,6 +13,7 @@ import FirebaseStorage
 
 class ProfileService: ObservableObject {
     @Published var profileImageURL: String?
+    @Published var username: String?
     @Published var isUploading = false
 
     private let db = Firestore.firestore()
@@ -83,12 +84,20 @@ class ProfileService: ObservableObject {
         }
     }
 
-    /// Fetch the current user's profile image URL from Firestore.
+    /// Fetch the current user's profile data (image URL and username) from Firestore.
     func fetchProfileImageURL() {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        fetchProfileImageURL(for: uid) { [weak self] url in
+        db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
+            if let error = error {
+                print("Error fetching profile data: \(error)")
+                return
+            }
+            let data = snapshot?.data()
+            let url = data?["photoURL"] as? String
+            let name = data?["username"] as? String
             DispatchQueue.main.async {
                 self?.profileImageURL = url
+                self?.username = name
             }
         }
     }

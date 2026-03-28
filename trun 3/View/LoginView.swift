@@ -26,6 +26,7 @@ struct LoginView: View {
     @Environment(\.colorScheme) var colorScheme
     
     @ObservedObject var loginManager: LoginManager
+    var showSignUp: () -> Void
     
     var body: some View {
         ZStack {
@@ -75,24 +76,6 @@ struct LoginView: View {
                             .cornerRadius(12)
                     }
                     
-                    // SIGN UP BUTTON
-                    Button(action: {
-                        if authenticateUser() {
-                            signUp(email: username, password: password)
-                        }
-                    }) {
-                        Text("Create Account")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.white.opacity(0.2))
-                            .cornerRadius(12)
-                    }
-                    
-                    Text("Password must contain 1 special character and 1 number.")
-                        .font(.caption2)
-                        .foregroundColor(.white.opacity(0.8))
                 }
                 .padding(.horizontal, 30)
                 
@@ -102,6 +85,18 @@ struct LoginView: View {
                 .font(.subheadline)
                 .foregroundColor(.white)
                 .padding(.top)
+
+                Button(action: showSignUp) {
+                    HStack(spacing: 4) {
+                        Text("Don't have an account?")
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("Sign Up")
+                            .foregroundColor(.blue)
+                            .fontWeight(.semibold)
+                    }
+                    .font(.subheadline)
+                }
+                .padding(.top, 5)
                 
                 Spacer()
                 
@@ -160,6 +155,9 @@ struct LoginView: View {
                 }
                 .padding(.bottom, 40)
             }
+        }
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
         .sheet(isPresented: $forgotpassword) {
             VStack(spacing: 20) {
@@ -266,17 +264,6 @@ struct LoginView: View {
         return true
     }
     
-    func signUp(email: String, password: String) {
-        Auth.auth().createUser(withEmail: email, password: password) { authResult, error in
-            if let error = error {
-                print("Error signing up: \(error.localizedDescription)")
-            } else {
-                loginManager.isLoggedIn = true
-                print("User signed up successfully")
-            }
-        }
-    }
-    
     func signIn(email: String, password: String) {
         Auth.auth().signIn(withEmail: email, password: password) { authResult, error in
             if let error = error {
@@ -326,5 +313,5 @@ struct LoginView: View {
 }
 
 #Preview {
-    LoginView(loginManager: LoginManager())
+    LoginView(loginManager: LoginManager(), showSignUp: {})
 }

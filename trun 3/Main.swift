@@ -44,14 +44,29 @@ class LoginManager : ObservableObject {
     }
 }
 
+enum AuthScreen {
+    case signIn
+    case signUp
+}
+
 struct MainView : View {
     @StateObject public var loginManager = LoginManager()
-    
+    @State private var authScreen: AuthScreen = .signIn
+
     var body: some View {
         if loginManager.isLoggedIn {
             ContentView(loginManager: loginManager)
         } else {
-            LoginView(loginManager: loginManager)
+            switch authScreen {
+            case .signIn:
+                LoginView(loginManager: loginManager, showSignUp: {
+                    withAnimation { authScreen = .signUp }
+                })
+            case .signUp:
+                SignUpView(loginManager: loginManager, showSignIn: {
+                    withAnimation { authScreen = .signIn }
+                })
+            }
         }
     }
 }
