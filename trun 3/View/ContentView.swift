@@ -392,6 +392,15 @@ struct ContentView: View {
                                     )
                                 } else if showDBInspector {
                                     DatabaseInspectorView(isPresented: $showDBInspector)
+                                } else if showRouteGenerator {
+                                    if #available(iOS 26.0, *) {
+                                        RouteGeneratorView(
+                                            routes: $routes,
+                                            selectedRoute: $selectedRoute,
+                                            isPresented: $showRouteGenerator,
+                                            userLocation: viewModel.locationManager?.location?.coordinate
+                                        )
+                                    }
                                 } else {
                                     ScrollView(.vertical, showsIndicators: true) {
                                         VStack(spacing: 16) {
@@ -624,6 +633,15 @@ struct ContentView: View {
                                             .background(Color.blue)
                                             .cornerRadius(12)
                                     }
+                                    .fileImporter(
+                                        isPresented: $isFileImporterPresented,
+                                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                                        allowsMultipleSelection: false
+                                    ) { result in
+                                        if case .success(let urls) = result, let url = urls.first {
+                                            importGPX(from: url)
+                                        }
+                                    }
 
                                     // Upload GPX to Firestore
                                     Button(action: { isUploadImporterPresented = true }) {
@@ -635,6 +653,15 @@ struct ContentView: View {
                                             .padding(.vertical, 14)
                                             .background(Color.green)
                                             .cornerRadius(12)
+                                    }
+                                    .fileImporter(
+                                        isPresented: $isUploadImporterPresented,
+                                        allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
+                                        allowsMultipleSelection: false
+                                    ) { result in
+                                        if case .success(let urls) = result, let url = urls.first {
+                                            uploadGPXToFirestore(from: url)
+                                        }
                                     }
 
                                     // Record/Save Button
@@ -674,10 +701,20 @@ struct ContentView: View {
                                             .background(locationManager.isRecording ? Color.red : Color.orange)
                                             .cornerRadius(12)
                                     }
+                                    .fileExporter(
+                                        isPresented: $isFileExporterPresented,
+                                        document: gpxDocument,
+                                        contentType: UTType(filenameExtension: "gpx") ?? .xml,
+                                        defaultFilename: "MyRun.gpx"
+                                    ) { result in
+                                        if !pendingGPXString.isEmpty {
+                                            // showRouteNamePrompt = true
+                                        }
+                                    }
 
                                     // AI Generate Button
                                     if #available(iOS 26, *) {
-                                        Button(action: { showRouteGenerator = true }) {
+                                        Button(action: { showRouteGenerator = true; runningMenuHeight = .large }) {
                                             Label("Generate", systemImage: "wand.and.stars")
                                                 .font(.subheadline)
                                                 .fontWeight(.semibold)
@@ -787,44 +824,6 @@ struct ContentView: View {
                         .background(.ultraThinMaterial)
                         .cornerRadius(16)
                     }
-                }
-            }
-            .fullScreenCover(isPresented: $showRouteGenerator) {
-                if #available(iOS 26.0, *) {
-                    RouteGeneratorView(
-                        routes: $routes,
-                        selectedRoute: $selectedRoute,
-                        isPresented: $showRouteGenerator,
-                        userLocation: viewModel.locationManager?.location?.coordinate
-                    )
-                }
-            }
-            .fileImporter(
-                isPresented: $isFileImporterPresented,
-                allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
-                allowsMultipleSelection: false
-            ) { result in
-                if case .success(let urls) = result, let url = urls.first {
-                    importGPX(from: url)
-                }
-            }
-            .fileImporter(
-                isPresented: $isUploadImporterPresented,
-                allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
-                allowsMultipleSelection: false
-            ) { result in
-                if case .success(let urls) = result, let url = urls.first {
-                    uploadGPXToFirestore(from: url)
-                }
-            }
-            .fileExporter(
-                isPresented: $isFileExporterPresented,
-                document: gpxDocument,
-                contentType: UTType(filenameExtension: "gpx") ?? .xml,
-                defaultFilename: "MyRun.gpx"
-            ) { result in
-                if !pendingGPXString.isEmpty {
-                    // showRouteNamePrompt = true
                 }
             }
         }
