@@ -7,6 +7,7 @@
 //
 
 import ActivityKit
+import Foundation
 
 // MARK: - Protocol
 
@@ -33,8 +34,9 @@ final class DefaultLiveActivityService: LiveActivityManaging {
         let initialState = RunActivityAttributes.ContentState(
             distanceMiles: 0,
             pace: pace,
-            elapsedSeconds: 0,
-            isPaused: false
+            timerDate: Date(),
+            isPaused: false,
+            elapsedSeconds: 0
         )
         let activity = try Activity.request(
             attributes: attributes,
@@ -67,8 +69,9 @@ final class DefaultLiveActivityService: LiveActivityManaging {
         let state = RunActivityAttributes.ContentState(
             distanceMiles: distanceMiles,
             pace: pace,
-            elapsedSeconds: elapsedSeconds,
-            isPaused: isPaused
+            timerDate: Date() - elapsedSeconds,
+            isPaused: isPaused,
+            elapsedSeconds: elapsedSeconds
         )
         await activity.update(.init(state: state, staleDate: nil))
     }
@@ -81,11 +84,12 @@ final class DefaultLiveActivityService: LiveActivityManaging {
         let finalState = RunActivityAttributes.ContentState(
             distanceMiles: distanceMiles,
             pace: pace,
-            elapsedSeconds: elapsedSeconds,
-            isPaused: false
+            timerDate: Date() - elapsedSeconds,
+            isPaused: false,
+            elapsedSeconds: elapsedSeconds
         )
         Task {
-            await activity.end(.init(state: finalState, staleDate: nil), dismissalPolicy: .default)
+            await activity.end(.init(state: finalState, staleDate: nil), dismissalPolicy: .immediate)
         }
     }
 }

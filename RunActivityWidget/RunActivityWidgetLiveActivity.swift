@@ -48,9 +48,16 @@ struct RunActivityWidgetLiveActivity: Widget {
                         Text("TIME")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Text(formatTime(context.state.elapsedSeconds))
-                            .font(.system(.title3, design: .monospaced).bold())
+                        if context.state.isPaused {
+                            Text(formatElapsed(context.state.elapsedSeconds))
+                                .font(.system(.title3, design: .monospaced).bold())
+                        } else {
+                            Text(context.state.timerDate, style: .timer)
+                                .font(.system(.title3, design: .monospaced).bold())
+                                .multilineTextAlignment(.center)
+                        }
                     }
+                    .frame(maxWidth: .infinity)
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
@@ -103,9 +110,16 @@ struct RunActivityWidgetLiveActivity: Widget {
                 Text("TIME")
                     .font(.caption2.bold())
                     .foregroundStyle(.secondary)
-                Text(formatTime(context.state.elapsedSeconds))
-                    .font(.system(.title2, design: .monospaced).bold())
+                if context.state.isPaused {
+                    Text(formatElapsed(context.state.elapsedSeconds))
+                        .font(.system(.title2, design: .monospaced).bold())
+                } else {
+                    Text(context.state.timerDate, style: .timer)
+                        .font(.system(.title2, design: .monospaced).bold())
+                        .multilineTextAlignment(.center)
+                }
             }
+            .frame(maxWidth: .infinity)
 
             Spacer()
 
@@ -141,11 +155,13 @@ struct RunActivityWidgetLiveActivity: Widget {
         String(format: "%.2f", miles)
     }
 
-    private func formatTime(_ seconds: Double) -> String {
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
+    private func formatElapsed(_ seconds: Double) -> String {
+        let total = Int(seconds)
+        let mins = total / 60
+        let secs = total % 60
         return String(format: "%d:%02d", mins, secs)
     }
+
 
     private func paceLabel(_ activityType: String) -> String {
         activityType == "Cycling" ? "SPEED" : "PACE"

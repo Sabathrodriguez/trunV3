@@ -920,7 +920,6 @@ struct RunInfoView: View {
         inRunningMode = false
         locationManager.stopTracking()
         runSession.isTimerPaused = true
-        runSession.currentTimer = 0
         generator.prepare()
         generator.selectionChanged()
         runSession.isRunDone = true
@@ -929,6 +928,7 @@ struct RunInfoView: View {
         // End workout session, Live Activity, and clear persistence snapshot
         healthStore.endWorkoutSession()
         runSession.endLiveActivity()
+        runSession.currentTimer = 0
         RunPersistenceService.clear()
 
         // Stop multiplayer session
