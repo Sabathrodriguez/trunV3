@@ -40,7 +40,7 @@ class RouteLeaderboardService: ObservableObject {
 
         parentRef.collection("runs").addDocument(data: runData) { error in
             if let error = error {
-                print("Error saving run to leaderboard: \(error)")
+                AppLogger.routes.error("Error saving run to leaderboard: \(error)")
             }
 
             // Increment runCount on the shared route document
@@ -50,7 +50,7 @@ class RouteLeaderboardService: ObservableObject {
                 "runCount": FieldValue.increment(Int64(1))
             ]) { error in
                 if let error = error {
-                    print("Error incrementing runCount: \(error)")
+                    AppLogger.routes.error("Error incrementing runCount: \(error)")
                 }
                 DispatchQueue.main.async {
                     completion?()
@@ -72,7 +72,7 @@ class RouteLeaderboardService: ObservableObject {
                 DispatchQueue.main.async { self.isLoading = false }
 
                 if let error = error {
-                    print("Error fetching leaderboard: \(error)")
+                    AppLogger.routes.error("Error fetching leaderboard: \(error)")
                     return
                 }
 

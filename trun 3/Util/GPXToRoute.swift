@@ -16,7 +16,7 @@ class GPXToRoute {
                 let parser = GPXParser()
                 return parser.parseGPX(data: data)
             } catch {
-                print("Error reading external file: \(error)")
+                AppLogger.routes.error("Error reading external GPX file: \(error)")
             }
         }
 
@@ -31,7 +31,7 @@ class GPXToRoute {
                 let parser = GPXParser()
                 return parser.parseGPX(data: data)
             } catch {
-                print("Error reading file from Documents: \(error)")
+                AppLogger.routes.error("Error reading GPX from Documents: \(error)")
             }
         }
 
@@ -42,18 +42,18 @@ class GPXToRoute {
                 let parser = GPXParser()
                 return parser.parseGPX(data: data)
             } catch {
-                print("Error reading bundle file: \(error)")
+                AppLogger.routes.error("Error reading GPX from bundle: \(error)")
                 return nil
             }
         }
 
-        print("GPX file not found: \(fileName)")
+        AppLogger.routes.error("GPX file not found: \(fileName)")
         return nil
     }
 
     func convertGPXToRoute(filePath: String) -> [CLLocationCoordinate2D]? {
         if let coordinates = readGPXFile(fileName: filePath) {
-            print("Parsed \(coordinates.count) coordinates")
+            AppLogger.routes.debug("Parsed \(coordinates.count) GPX coordinates")
             return coordinates
         } else {
             return nil

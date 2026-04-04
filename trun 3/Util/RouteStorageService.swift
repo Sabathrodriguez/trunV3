@@ -7,32 +7,52 @@
 
 import Foundation
 
-enum RouteStorageService {
+// MARK: - Protocol
 
-    private static var storageURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("saved_routes.json")
+/// Abstraction over local route file storage so tests can inject a mock.
+protocol RouteStorage {
+    func loadRoutes() -> [String: [Route]]?
+    func saveRoutes(_ routes: [String: [Route]])
+}
+
+// MARK: - Concrete Implementation
+
+final class RouteStorageService: RouteStorage {
+
+    /// Production shared instance.
+    static let shared = RouteStorageService()
+
+    private let fileManager: FileManager
+    private let storageURL: URL
+
+    init(fileManager: FileManager = .default, directory: URL? = nil) {
+        self.fileManager = fileManager
+        let base = directory ?? fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        self.storageURL = base.appendingPathComponent("saved_routes.json")
     }
 
-    static func loadRoutes() -> [String: [Route]]? {
-        guard FileManager.default.fileExists(atPath: storageURL.path) else {
-            return nil
-        }
+    func loadRoutes() -> [String: [Route]]? {
+        guard fileManager.fileExists(atPath: storageURL.path) else { return nil }
         do {
             let data = try Data(contentsOf: storageURL)
             return try JSONDecoder().decode([String: [Route]].self, from: data)
         } catch {
-            print("Failed to load routes: \(error)")
+            AppLogger.persistence.error("Failed to load routes: \(error)")
             return nil
         }
     }
 
-    static func saveRoutes(_ routes: [String: [Route]]) {
+    func saveRoutes(_ routes: [String: [Route]]) {
         do {
             let data = try JSONEncoder().encode(routes)
             try data.write(to: storageURL, options: .atomic)
         } catch {
-            print("Failed to save routes: \(error)")
+            AppLogger.persistence.error("Failed to save routes: \(error)")
         }
     }
+
+    // MARK: - Static Convenience (delegates to shared instance)
+
+    static func loadRoutes() -> [String: [Route]]? { shared.loadRoutes() }
+    static func saveRoutes(_ routes: [String: [Route]]) { shared.saveRoutes(routes) }
 }

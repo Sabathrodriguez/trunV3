@@ -12,8 +12,8 @@
     "performanceAntipatternCheckerEnabled" : true,
     "targetForVariableExpansion" : {
       "containerPath" : "container:trun 3.xcodeproj",
-      "identifier" : "10E982392D61A5FB00358D21",
-      "name" : "trun 3"
+      "identifier" : "CC0005002D61A5FB00358D21",
+      "name" : "trun 3Tests"
     }
   },
   "testTargets" : [

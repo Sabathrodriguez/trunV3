@@ -15,85 +15,104 @@ struct SharedRouteCache: Codable {
     let radiusMiles: Double
 }
 
-enum SharedRouteCacheService {
+// MARK: - Protocol
+
+/// Abstraction over the route cache so tests can inject time-controlled mocks.
+protocol CacheStore {
+    func save(_ cache: SharedRouteCache)
+    func load() -> SharedRouteCache?
+    func clear()
+    func isValid(cache: SharedRouteCache, currentLat: Double, currentLon: Double, ttl: TimeInterval) -> Bool
+}
+
+// MARK: - Concrete Implementation
+
+final class SharedRouteCacheService: CacheStore {
 
     // MARK: - Configuration
 
     static let defaultTTL: TimeInterval = 30 * 60   // 30 minutes
     static let locationThresholdMiles: Double = 1.0  // refetch if user moves >1 mile
 
-    // MARK: - Storage
+    /// Production shared instance.
+    static let shared = SharedRouteCacheService()
 
-    private static var storageURL: URL {
-        let appSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0]
-        try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-        return appSupport.appendingPathComponent("shared_route_cache.json")
+    private let fileManager: FileManager
+    private let storageURL: URL
+    private let now: () -> Date  // injectable clock for TTL testing
+
+    init(
+        fileManager: FileManager = .default,
+        directory: URL? = nil,
+        now: @escaping () -> Date = { Date() }
+    ) {
+        self.fileManager = fileManager
+        self.now = now
+        let base = directory ?? {
+            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            try? fileManager.createDirectory(at: appSupport, withIntermediateDirectories: true)
+            return appSupport
+        }()
+        self.storageURL = base.appendingPathComponent("shared_route_cache.json")
     }
 
     // MARK: - Save
 
-    static func save(_ cache: SharedRouteCache) {
+    func save(_ cache: SharedRouteCache) {
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(cache)
             try data.write(to: storageURL, options: .atomic)
         } catch {
-            print("[SharedRouteCache] Failed to save: \(error)")
+            AppLogger.cache.error("Failed to save shared route cache: \(error)")
         }
     }
 
     // MARK: - Load
 
-    static func load() -> SharedRouteCache? {
-        guard FileManager.default.fileExists(atPath: storageURL.path) else {
-            return nil
-        }
+    func load() -> SharedRouteCache? {
+        guard fileManager.fileExists(atPath: storageURL.path) else { return nil }
         do {
             let data = try Data(contentsOf: storageURL)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode(SharedRouteCache.self, from: data)
         } catch {
-            print("[SharedRouteCache] Failed to load: \(error)")
+            AppLogger.cache.error("Failed to load shared route cache: \(error)")
             return nil
         }
     }
 
     // MARK: - Invalidation
 
-    static func clear() {
-        try? FileManager.default.removeItem(at: storageURL)
+    func clear() {
+        try? fileManager.removeItem(at: storageURL)
     }
 
     // MARK: - Validity
 
     /// Returns `true` if the cache is within TTL and the user hasn't moved
     /// more than `locationThresholdMiles` from the cached location.
-    static func isValid(
+    func isValid(
         cache: SharedRouteCache,
         currentLat: Double,
         currentLon: Double,
-        ttl: TimeInterval = defaultTTL
+        ttl: TimeInterval = SharedRouteCacheService.defaultTTL
     ) -> Bool {
-        let age = Date().timeIntervalSince(cache.cachedAt)
+        let age = now().timeIntervalSince(cache.cachedAt)
         guard age < ttl else { return false }
 
-        let distance = distanceMiles(
+        let distance = Self.distanceMiles(
             lat1: cache.userLat, lon1: cache.userLon,
             lat2: currentLat, lon2: currentLon
         )
-        guard distance < locationThresholdMiles else { return false }
-
-        return true
+        return distance < SharedRouteCacheService.locationThresholdMiles
     }
 
     // MARK: - Haversine Distance (miles)
 
-    private static func distanceMiles(
+    static func distanceMiles(
         lat1: Double, lon1: Double,
         lat2: Double, lon2: Double
     ) -> Double {
@@ -105,5 +124,19 @@ enum SharedRouteCacheService {
                 sin(dLon / 2) * sin(dLon / 2)
         let c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return R * c
+    }
+
+    // MARK: - Static Convenience (delegates to shared instance)
+
+    static func save(_ cache: SharedRouteCache) { shared.save(cache) }
+    static func load() -> SharedRouteCache? { shared.load() }
+    static func clear() { shared.clear() }
+    static func isValid(
+        cache: SharedRouteCache,
+        currentLat: Double,
+        currentLon: Double,
+        ttl: TimeInterval = SharedRouteCacheService.defaultTTL
+    ) -> Bool {
+        shared.isValid(cache: cache, currentLat: currentLat, currentLon: currentLon, ttl: ttl)
     }
 }

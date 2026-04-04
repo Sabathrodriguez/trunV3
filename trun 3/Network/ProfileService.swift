@@ -89,7 +89,7 @@ class ProfileService: ObservableObject {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
             if let error = error {
-                print("Error fetching profile data: \(error)")
+                AppLogger.network.error("Error fetching profile data: \(error)")
                 return
             }
             let data = snapshot?.data()
@@ -132,7 +132,7 @@ class ProfileService: ObservableObject {
     func fetchProfileImageURL(for uid: String, completion: @escaping (String?) -> Void) {
         db.collection("users").document(uid).getDocument { snapshot, error in
             if let error = error {
-                print("Error fetching profile image URL: \(error)")
+                AppLogger.network.error("Error fetching profile image URL: \(error)")
                 completion(nil)
                 return
             }

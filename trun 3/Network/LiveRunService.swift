@@ -60,7 +60,7 @@ class LiveRunService: ObservableObject {
                 guard let routeSnapshot = routeChild as? DataSnapshot else { continue }
                 if routeSnapshot.hasChild(uid) {
                     activeRunsRef.child(routeSnapshot.key).child(uid).removeValue()
-                    print("[LiveRunService] Cleaned up stale entry for \(uid) in route \(routeSnapshot.key)")
+                    AppLogger.network.info("Cleaned up stale entry for \(uid) in route \(routeSnapshot.key)")
                 }
             }
         }
@@ -70,6 +70,7 @@ class LiveRunService: ObservableObject {
 
     func startSession(routeID: Double, routeCoordinates: [CLLocationCoordinate2D]) {
         guard let uid = currentUID else { return }
+        if isSessionActive { stopSession() }
 
         let routeKey = String(Int(routeID))
         self.currentRouteID = routeKey
@@ -227,7 +228,7 @@ class LiveRunService: ObservableObject {
                 runnersDict.removeValue(forKey: uid)
                 joinOrder.removeAll { $0 == uid }
                 publishRunners()
-                print("[LiveRunService] Removed stale runner \(uid) (age: \(Int(ageSeconds))s)")
+                AppLogger.network.debug("Removed stale runner \(uid) (age: \(Int(ageSeconds))s)")
                 return
             }
         }
@@ -295,7 +296,7 @@ class LiveRunService: ObservableObject {
                     ref.child(childSnapshot.key).removeValue()
                     self.runnersDict.removeValue(forKey: childSnapshot.key)
                     self.joinOrder.removeAll { $0 == childSnapshot.key }
-                    print("[LiveRunService] Sweep removed stale runner \(childSnapshot.key) (age: \(Int(ageSeconds))s)")
+                    AppLogger.network.debug("Sweep removed stale runner \(childSnapshot.key) (age: \(Int(ageSeconds))s)")
                 }
             }
             self.publishRunners()

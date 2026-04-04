@@ -78,14 +78,11 @@ struct SharedRouteLibraryView: View {
                                     Button(action: {
                                         downloadRoute(route)
                                     }) {
-                                        let _ = print("about to download route: \(route.id)")
                                         if downloadingRouteID == route.id {
-                                            let _1 = print("downloading route: \(route.id)")
                                             ProgressView()
                                                 .scaleEffect(0.7)
                                                 .frame(width: 60, height: 30)
                                         } else {
-                                            let _2 = print("adding route: \(route.id)")
                                             Text("Add")
                                                 .font(.caption)
                                                 .fontWeight(.bold)
@@ -128,14 +125,12 @@ struct SharedRouteLibraryView: View {
     private func downloadRoute(_ sharedRoute: SharedRoute) {
         downloadingRouteID = sharedRoute.id
         
-//        print("downloading routes")
         service.getRouteRunNum(docID: sharedRoute.id) { runCount in
             guard let runCount else {
                 DispatchQueue.main.async { downloadingRouteID = nil }
                 return
             }
-            
-            print(runCount)
+            AppLogger.routes.debug("Route \(sharedRoute.id) run count: \(runCount)")
         }
 
         service.fetchRouteGPX(docID: sharedRoute.id) { gpxString in
@@ -172,7 +167,7 @@ struct SharedRouteLibraryView: View {
                     downloadingRouteID = nil
                 }
             } catch {
-                print("Error saving downloaded route: \(error)")
+                AppLogger.routes.error("Error saving downloaded route: \(error)")
                 DispatchQueue.main.async { downloadingRouteID = nil }
             }
         }

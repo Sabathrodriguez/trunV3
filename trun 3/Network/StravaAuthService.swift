@@ -47,14 +47,14 @@ class StravaAuthService: NSObject, ObservableObject {
             guard let self = self else { return }
 
             if let error = error {
-                print("Strava auth error: \(error.localizedDescription)")
+                AppLogger.strava.error("Strava auth error: \(error.localizedDescription)")
                 return
             }
 
             guard let callbackURL = callbackURL,
                   let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
                   let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-                print("Strava auth: no code in callback")
+                AppLogger.strava.error("Strava auth: no code in callback URL")
                 return
             }
 
@@ -78,7 +78,7 @@ class StravaAuthService: NSObject, ObservableObject {
 
             try parseTokenData(data)
         } catch {
-            print("Strava token exchange error: \(error)")
+            AppLogger.strava.error("Strava token exchange error: \(error)")
         }
     }
 

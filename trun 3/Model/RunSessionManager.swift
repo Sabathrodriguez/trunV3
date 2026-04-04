@@ -4,18 +4,45 @@ import CoreLocation
 import HealthKit
 import ActivityKit
 
+// MARK: - Run State Machine
+
+/// Explicit lifecycle states for a run session.
+/// Use this instead of multiple overlapping boolean flags.
+enum RunState: Equatable {
+    case idle
+    case running
+    case paused
+    case completed
+}
+
+// MARK: - RunSessionManager
+
 class RunSessionManager: ObservableObject {
     @Published var runData: Run = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
     @Published var currentDate: Date = Date()
 
     @Published var currentTimer: Double = 0.0
-    @Published var isTimerPaused: Bool = false
-    @Published var isPaused: Bool = false
     @Published var runStartDate: Date = Date()
     @Published var pausedDuration: Double = 0.0
     @Published var pauseStartDate: Date? = nil
 
-    @Published var isRunDone: Bool = false
+    // MARK: Run State (single source of truth)
+    @Published var runState: RunState = .idle
+
+    /// Backward-compatible computed properties so existing view code needs no changes.
+    var isPaused: Bool {
+        get { runState == .paused }
+        set { runState = newValue ? .paused : .running }
+    }
+    var isTimerPaused: Bool {
+        get { runState == .paused }
+        set { runState = newValue ? .paused : .running }
+    }
+    var isRunDone: Bool {
+        get { runState == .completed }
+        set { runState = newValue ? .completed : .idle }
+    }
+
     @Published var routeCompleted: Bool = false
     @Published var isSaving: Bool = false
 
@@ -28,79 +55,66 @@ class RunSessionManager: ObservableObject {
     // Activity type (shared so ContentView can access for scenePhase saves)
     @Published var activityType: HKWorkoutActivityType = .running
 
+    // Published Live Activity error so views can surface failures
+    @Published var liveActivityError: Error?
+
     // Captured GPS locations for HealthKit route and Strava export
     var runLocations: [CLLocation] = []
 
-    // Live Activity
-    private var currentActivity: Activity<RunActivityAttributes>?
+    // MARK: - Dependencies (injectable for testing)
+
+    private let liveActivityService: LiveActivityManaging
+
+    init(liveActivityService: LiveActivityManaging = DefaultLiveActivityService()) {
+        self.liveActivityService = liveActivityService
+    }
 
     // MARK: - Live Activity
 
     func startLiveActivity(activityType: HKWorkoutActivityType, isRouteRun: Bool) {
         let authInfo = ActivityAuthorizationInfo()
-        print("[RunSessionManager] Live Activities enabled: \(authInfo.areActivitiesEnabled)")
+        AppLogger.liveActivity.debug("Live Activities enabled: \(authInfo.areActivitiesEnabled)")
 
         guard authInfo.areActivitiesEnabled else {
-            print("[RunSessionManager] Live Activities not enabled — check Settings → trun 3 → Live Activities")
+            AppLogger.liveActivity.error("Live Activities not enabled — check Settings → trun 3 → Live Activities")
             return
         }
 
-        let attributes = RunActivityAttributes(
-            activityType: activityType.name,
-            isRouteRun: isRouteRun
-        )
-        let initialState = RunActivityAttributes.ContentState(
-            distanceMiles: 0,
-            pace: activityType == .cycling ? "0.0" : "0:00",
-            elapsedSeconds: 0,
-            isPaused: false
-        )
+        let initialPace = activityType == .cycling ? "0.0" : "0:00"
 
         do {
-            let activity = try Activity.request(
-                attributes: attributes,
-                content: .init(state: initialState, staleDate: nil)
+            try liveActivityService.start(
+                activityType: activityType.name,
+                isRouteRun: isRouteRun,
+                pace: initialPace
             )
-            currentActivity = activity
-            print("[RunSessionManager] Live Activity started successfully, id: \(activity.id)")
         } catch {
-            print("[RunSessionManager] Failed to start Live Activity: \(error)")
+            AppLogger.liveActivity.error("Failed to start Live Activity: \(error)")
+            DispatchQueue.main.async { self.liveActivityError = error }
         }
     }
 
     func updateLiveActivity(distanceMiles: Double, pace: String, elapsedSeconds: Double, isPaused: Bool) {
-        guard let activity = currentActivity else { return }
-
-        let updatedState = RunActivityAttributes.ContentState(
-            distanceMiles: distanceMiles,
-            pace: pace,
-            elapsedSeconds: elapsedSeconds,
-            isPaused: isPaused
-        )
-
         Task {
-            await activity.update(.init(state: updatedState, staleDate: nil))
+            await liveActivityService.update(
+                distanceMiles: distanceMiles,
+                pace: pace,
+                elapsedSeconds: elapsedSeconds,
+                isPaused: isPaused
+            )
         }
     }
 
     func endLiveActivity() {
-        guard let activity = currentActivity else { return }
-
-        let finalState = RunActivityAttributes.ContentState(
+        liveActivityService.end(
             distanceMiles: prevRunDistance,
             pace: prevRunMinPerMile,
-            elapsedSeconds: currentTimer,
-            isPaused: false
+            elapsedSeconds: currentTimer
         )
-
-        Task {
-            await activity.end(.init(state: finalState, staleDate: nil), dismissalPolicy: .default)
-        }
-        currentActivity = nil
     }
 
     /// Build a snapshot of the current run state for persistence.
-    func buildSnapshot(locationManager: LocationManager) -> RunSnapshot {
+    func buildSnapshot(locationManager: LocationManager, selectedRouteID: Double? = nil) -> RunSnapshot {
         let serializedLocations = locationManager.runLocations.map { SerializableLocation(from: $0) }
 
         return RunSnapshot(
@@ -114,6 +128,7 @@ class RunSessionManager: ObservableObject {
             elevationGain: locationManager.elevationGain,
             locations: serializedLocations,
             activityTypeRawValue: activityType.rawValue,
+            selectedRouteID: selectedRouteID,
             savedAt: Date().timeIntervalSince1970
         )
     }

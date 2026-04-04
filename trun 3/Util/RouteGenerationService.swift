@@ -230,7 +230,7 @@ class RouteGenerationService: ObservableObject {
                 distanceMiles: finalDistance
             )
         } catch {
-            print("Apple Maps route failed: \(error.localizedDescription)")
+            AppLogger.routes.error("Apple Maps route failed: \(error.localizedDescription)")
             return nil
         }
     }
@@ -286,7 +286,7 @@ class RouteGenerationService: ObservableObject {
                 distanceMiles: finalDistance
             )
         } catch {
-            print("Google Routes failed: \(error.localizedDescription)")
+            AppLogger.routes.error("Google Routes failed: \(error.localizedDescription)")
             return nil
         }
     }

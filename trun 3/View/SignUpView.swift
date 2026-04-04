@@ -163,20 +163,25 @@ struct SignUpView: View {
         // Check username uniqueness and email availability, then sign up
         isCheckingUsername = true
         checkUsernameAvailability(trimmedUsername) { isUsernameAvailable in
-            if !isUsernameAvailable {
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                guard let isUsernameAvailable else {
+                    isCheckingUsername = false
+                    showValidationAlert(title: "Network Error", message: "Could not verify username availability. Please check your connection and try again.")
+                    return
+                }
+                if !isUsernameAvailable {
                     isCheckingUsername = false
                     showValidationAlert(title: "Username Taken", message: "The username \"\(trimmedUsername)\" is already in use. Please choose a different one.")
+                    return
                 }
-                return
-            }
-            checkEmailAvailability(email) { isEmailAvailable in
-                DispatchQueue.main.async {
-                    isCheckingUsername = false
-                    if isEmailAvailable {
-                        signUp(username: trimmedUsername)
-                    } else {
-                        showValidationAlert(title: "Email Already in Use", message: "An account with this email already exists. Please sign in or use a different email.")
+                checkEmailAvailability(email) { isEmailAvailable in
+                    DispatchQueue.main.async {
+                        isCheckingUsername = false
+                        if isEmailAvailable {
+                            signUp(username: trimmedUsername)
+                        } else {
+                            showValidationAlert(title: "Email Already in Use", message: "An account with this email already exists. Please sign in or use a different email.")
+                        }
                     }
                 }
             }
@@ -189,26 +194,23 @@ struct SignUpView: View {
         showAlert = true
     }
 
-    private func checkUsernameAvailability(_ username: String, completion: @escaping (Bool) -> Void) {
+    private func checkUsernameAvailability(_ username: String, completion: @escaping (Bool?) -> Void) {
         let db = Firestore.firestore()
-        db.collection("users")
-            .whereField("username", isEqualTo: username)
-            .limit(to: 1)
-            .getDocuments { snapshot, error in
-                if let error = error {
-                    print("Error checking username: \(error.localizedDescription)")
-                    completion(false)
-                    return
-                }
-                let isTaken = !(snapshot?.documents.isEmpty ?? true)
-                completion(!isTaken)
+        db.collection("usernames").document(username.lowercased()).getDocument { snapshot, error in
+            if let error = error {
+                AppLogger.auth.error("Error checking username availability: \(error.localizedDescription)")
+                completion(nil)
+                return
             }
+            let isTaken = snapshot?.exists ?? false
+            completion(!isTaken)
+        }
     }
 
     private func checkEmailAvailability(_ email: String, completion: @escaping (Bool) -> Void) {
         Auth.auth().fetchSignInMethods(forEmail: email) { methods, error in
             if let error = error {
-                print("Error checking email: \(error.localizedDescription)")
+                AppLogger.auth.error("Error checking email availability: \(error.localizedDescription)")
                 completion(false)
                 return
             }
@@ -241,13 +243,22 @@ struct SignUpView: View {
 
             // Save username to Firestore
             let db = Firestore.firestore()
-            db.collection("users").document(user.uid).setData([
+            let batch = db.batch()
+
+            let userRef = db.collection("users").document(user.uid)
+            batch.setData([
                 "username": username,
                 "email": email,
                 "createdAt": FieldValue.serverTimestamp()
-            ], merge: true) { firestoreError in
+            ], forDocument: userRef, merge: true)
+
+            // Reserve the username so availability checks stay fast and unauthenticated
+            let usernameRef = db.collection("usernames").document(username.lowercased())
+            batch.setData(["uid": user.uid], forDocument: usernameRef)
+
+            batch.commit { firestoreError in
                 if let firestoreError = firestoreError {
-                    print("Error saving username to Firestore: \(firestoreError.localizedDescription)")
+                    AppLogger.auth.error("Error saving user data to Firestore: \(firestoreError.localizedDescription)")
                 }
             }
         }

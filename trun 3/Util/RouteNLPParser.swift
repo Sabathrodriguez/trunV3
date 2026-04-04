@@ -29,7 +29,7 @@ class RouteNLPParser {
 
         let session = LanguageModelSession()
 
-        print("Parsing user input with on-device model: \(userInput)")
+        AppLogger.routes.debug("Parsing user input with on-device model: \(userInput)")
 
         let instructions = """
         You are a route assistant. Parse the user's request into structured route parameters.
@@ -59,10 +59,7 @@ class RouteNLPParser {
             throw ParsingError.invalidDistance(result.targetDistanceMiles)
         }
 
-        print("Parsed RouteRequest: \(result)")
-        print(result)
-        print(response.rawContent)
-        print(response.content.routeType)
+        AppLogger.routes.debug("Parsed RouteRequest: distance=\(result.targetDistanceMiles)mi, type=\(String(describing: result.routeType)), activity=\(String(describing: result.activityType))")
         return result
     }
 }

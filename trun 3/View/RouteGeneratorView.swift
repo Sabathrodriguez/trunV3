@@ -300,7 +300,7 @@ struct RouteGeneratorView: View {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     showError = true
-                    print("Route generation error: \(errorMessage)")
+                    AppLogger.routes.error("Route generation error: \(errorMessage)")
                 }
             }
         }

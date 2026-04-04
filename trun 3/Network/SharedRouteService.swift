@@ -43,7 +43,7 @@ class SharedRouteService: ObservableObject {
             .whereField("nameLower", isEqualTo: nameLower)
             .getDocuments { snapshot, error in
                 if let error = error {
-                    print("Error checking for duplicate route: \(error)")
+                    AppLogger.routes.error("Error checking for duplicate route: \(error)")
                     completion(false)
                     return
                 }
@@ -66,29 +66,29 @@ class SharedRouteService: ObservableObject {
     /// Returns the Firestore document ID on success so callers can link the route locally.
     func publishRoute(name: String, gpxString: String, distanceMiles: Double, coordinates: [CLLocationCoordinate2D], completion: @escaping (Result<String, Error>) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
-            print("[DEBUG] publishRoute failed: No authenticated user (currentUser is nil)")
+            AppLogger.routes.error("publishRoute failed: No authenticated user (currentUser is nil)")
             completion(.failure(PublishError.notAuthenticated))
             return
         }
         guard !coordinates.isEmpty else {
-            print("[DEBUG] publishRoute failed: coordinates array is empty")
+            AppLogger.routes.error("publishRoute failed: coordinates array is empty")
             completion(.failure(PublishError.invalidData("No coordinates found.")))
             return
         }
 
         // Server-side validation before writing to Firestore
         guard gpxString.utf8.count <= GPXValidator.maxFileSizeBytes else {
-            print("[DEBUG] publishRoute failed: GPX data too large (\(gpxString.utf8.count) bytes)")
+            AppLogger.routes.error("publishRoute failed: GPX data too large (\(gpxString.utf8.count) bytes)")
             completion(.failure(PublishError.invalidData("GPX data is too large.")))
             return
         }
         guard coordinates.count <= GPXValidator.maxCoordinateCount else {
-            print("[DEBUG] publishRoute failed: too many coordinates (\(coordinates.count))")
+            AppLogger.routes.error("publishRoute failed: too many coordinates (\(coordinates.count))")
             completion(.failure(PublishError.invalidData("Too many coordinates.")))
             return
         }
         guard distanceMiles <= GPXValidator.maxDistanceMiles else {
-            print("[DEBUG] publishRoute failed: route too long (\(distanceMiles) miles)")
+            AppLogger.routes.error("publishRoute failed: route too long (\(distanceMiles) miles)")
             completion(.failure(PublishError.invalidData("Route is too long.")))
             return
         }
@@ -104,7 +104,7 @@ class SharedRouteService: ObservableObject {
                 return
             }
 
-            print("[DEBUG] publishRoute: uid=\(uid), name=\(name), coords=\(coordinates.count), distance=\(distanceMiles)")
+            AppLogger.routes.info("publishRoute: uid=\(uid), name=\(name), coords=\(coordinates.count), distance=\(distanceMiles)")
 
             // Calculate center point (average of all coordinates)
             let centerLat = coordinates.map { $0.latitude }.reduce(0, +) / Double(coordinates.count)
@@ -126,7 +126,7 @@ class SharedRouteService: ObservableObject {
             ref = self.db.collection("sharedRoutes").addDocument(data: data) { error in
                 DispatchQueue.main.async {
                     if let error = error {
-                        print("Error publishing route: \(error)")
+                        AppLogger.routes.error("Error publishing route: \(error)")
                         completion(.failure(error))
                     } else {
                         SharedRouteCacheService.clear()
@@ -167,7 +167,7 @@ class SharedRouteService: ObservableObject {
                 }
 
                 if let error = error {
-                    print("Error fetching nearby routes: \(error)")
+                    AppLogger.routes.error("Error fetching nearby routes: \(error)")
                     // Fall back to stale cache on network error
                     if let staleCache = SharedRouteCacheService.load() {
                         DispatchQueue.main.async {
@@ -232,7 +232,7 @@ class SharedRouteService: ObservableObject {
                 DispatchQueue.main.async { self.isLoading = false }
 
                 if let error = error {
-                    print("Error fetching all routes: \(error)")
+                    AppLogger.routes.error("Error fetching all routes: \(error)")
                     return
                 }
 
@@ -266,7 +266,7 @@ class SharedRouteService: ObservableObject {
             guard let self = self else { return }
 
             if let error = error {
-                print("Geocoding error: \(error)")
+                AppLogger.routes.error("Geocoding error: \(error)")
                 DispatchQueue.main.async { self.isLoading = false }
                 return
             }
@@ -288,7 +288,7 @@ class SharedRouteService: ObservableObject {
                     guard let self = self else { return }
 
                     if let error = error {
-                        print("Error searching routes: \(error)")
+                        AppLogger.routes.error("Error searching routes: \(error)")
                         DispatchQueue.main.async { self.isLoading = false }
                         return
                     }
@@ -332,7 +332,7 @@ class SharedRouteService: ObservableObject {
     func fetchRouteGPX(docID: String, completion: @escaping (String?) -> Void) {
         db.collection("sharedRoutes").document(docID).getDocument { snapshot, error in
             if let error = error {
-                print("Error fetching route GPX: \(error)")
+                AppLogger.routes.error("Error fetching route GPX: \(error)")
                 completion(nil)
                 return
             }
@@ -340,17 +340,17 @@ class SharedRouteService: ObservableObject {
             completion(gpxData)
         }
     }
-    
+
     func getRouteRunNum(docID: String, completion: @escaping (Int?) -> Void) {
         db.collection("sharedRoutes").document(docID).getDocument { snapshot, error in
             if let error = error {
-                print("Error fetching route GPX: \(error)")
+                AppLogger.routes.error("Error fetching route run count: \(error)")
                 completion(nil)
                 return
             }
             let runCount = snapshot?.data()?["runCount"] as? Int
+            AppLogger.routes.debug("Run Count for \(docID): \(runCount ?? 0)")
             completion(runCount)
-            let _ = print("Run Count: \(runCount!)")
         }
     }
 }

@@ -229,7 +229,7 @@ struct ContentView: View {
                 }
                 .onChange(of: scenePhase) { newPhase in
                     if newPhase == .background && inRunningMode {
-                        let snapshot = runSession.buildSnapshot(locationManager: locationManager)
+                        let snapshot = runSession.buildSnapshot(locationManager: locationManager, selectedRouteID: selectedRoute?.id)
                         RunPersistenceService.save(snapshot)
                     }
                     // Restore the main sheet if it was lost during a background cycle
@@ -832,9 +832,9 @@ struct ContentView: View {
         healthStore.requestAuthorization{
             success, error in
             if let error = error{
-                print("Error getting health kit data: \(error)")
+                AppLogger.health.error("Error getting HealthKit authorization: \(error)")
             } else {
-                print("Successfullyretrieved healthkit data")
+                AppLogger.health.info("HealthKit authorization granted")
                 self.healthStore.fetchWeeklyDistances { distances in
                     self.healthStore.weeklyDistances = distances
                 }
@@ -871,6 +871,11 @@ struct ContentView: View {
         // Start a new workout session for continued background protection
         healthStore.startWorkoutSession(activityType: runSession.activityType)
 
+        // Restore the previously selected route from the snapshot
+        if let routeID = snapshot.selectedRouteID {
+            selectedRoute = routes.values.flatMap { $0 }.first { $0.id == routeID }
+        }
+
         // Restart multiplayer session if a route is selected
         liveRunService.cleanupOwnStaleEntries()
         if let route = selectedRoute {
@@ -882,7 +887,7 @@ struct ContentView: View {
         runningMenuHeight = .height(350)
         recoveredSnapshot = nil
 
-        print("[Recovery] Resumed interrupted run — \(locations.count) locations, \(String(format: "%.2f", snapshot.distance * 0.000621371)) miles")
+        AppLogger.run.info("Resumed interrupted run — \(locations.count) locations, \(String(format: "%.2f", snapshot.distance * 0.000621371)) miles")
     }
 
     /// Present an interrupted run as completed for the user to save or discard.
@@ -924,7 +929,7 @@ struct ContentView: View {
         runningMenuHeight = .height(250)
         recoveredSnapshot = nil
 
-        print("[Recovery] Presenting interrupted run for save — \(String(format: "%.2f", distanceMiles)) miles, \(minute):\(seconds)")
+        AppLogger.run.info("Presenting interrupted run for save — \(String(format: "%.2f", distanceMiles)) miles, \(minute):\(seconds)")
     }
     
     private func uploadGPXToFirestore(from url: URL) {
@@ -957,7 +962,7 @@ struct ContentView: View {
             alertDetails = error.errorDescription ?? "The file could not be validated."
             showAlert = true
         } catch {
-            print("Error reading GPX file: \(error)")
+            AppLogger.routes.error("Error reading GPX file: \(error)")
             alertTitle = "Error"
             alertDetails = "Could not read the GPX file."
             showAlert = true
@@ -1034,7 +1039,7 @@ struct ContentView: View {
             alertDetails = error.errorDescription ?? "The file could not be validated."
             showAlert = true
         } catch {
-            print("Error importing GPX: \(error)")
+            AppLogger.routes.error("Error importing GPX: \(error)")
             alertTitle = "Error"
             alertDetails = "Could not import the GPX file."
             showAlert = true

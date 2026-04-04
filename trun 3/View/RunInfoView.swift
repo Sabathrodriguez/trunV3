@@ -130,6 +130,7 @@ struct RunInfoView: View {
     @State private var showShareRoutePrompt = false
     @State private var shareRouteName = ""
     @State private var isPublishing = false
+    @State private var runSaved = false
     @State private var hasSubmittedLeaderboardEntry = false
     @StateObject private var publishService = SharedRouteService()
     
@@ -181,16 +182,63 @@ struct RunInfoView: View {
                             Button(action: {
                                 saveRunAction()
                             }) {
-                                Text(runSession.isSaving ? "Saving..." : "Save Run")
+                                Text(runSession.isSaving ? "Saving..." : runSaved ? "Saved ✓" : "Save Run")
                                     .font(.subheadline)
                                     .fontWeight(.bold)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 10)
-                                    .background(runSession.isSaving ? Color.blue.opacity(0.5) : Color.blue)
+                                    .background(runSession.isSaving || runSaved ? Color.blue.opacity(0.5) : Color.blue)
                                     .foregroundColor(.white)
                                     .cornerRadius(10)
                             }
-                            .disabled(runSession.isSaving)
+                            .disabled(runSession.isSaving || runSaved)
+                        }
+
+                        // Strava Export Button
+                        if stravaAuth.isAuthenticated {
+                            Button(action: {
+                                exportToStrava()
+                            }) {
+                                HStack(spacing: 8) {
+                                    if case .uploading = stravaUploadService.uploadStatus {
+                                        ProgressView().tint(.white)
+                                    } else if case .processing = stravaUploadService.uploadStatus {
+                                        ProgressView().tint(.white)
+                                    }
+                                    Text(stravaButtonLabel)
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(stravaButtonColor)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                            }
+                            .disabled(stravaButtonDisabled)
+                        }
+
+                        // Share as Route button (free runs only)
+                        if selectedRoute == nil && !runSession.runLocations.isEmpty {
+                            Button(action: {
+                                shareRouteName = ""
+                                showShareRoutePrompt = true
+                            }) {
+                                HStack(spacing: 8) {
+                                    if isPublishing {
+                                        ProgressView().tint(.white)
+                                    }
+                                    Text(isPublishing ? "Publishing..." : "Share as Route")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(isPublishing ? Color.teal.opacity(0.5) : Color.teal)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                            }
+                            .disabled(isPublishing)
                         }
                     }
                     .padding(.horizontal)
@@ -223,16 +271,16 @@ struct RunInfoView: View {
                         Button(action: {
                             saveRunAction()
                         }) {
-                            Text(runSession.isSaving ? "Saving..." : "Save Run")
+                            Text(runSession.isSaving ? "Saving..." : runSaved ? "Saved ✓" : "Save Run")
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(runSession.isSaving ? Color.blue.opacity(0.5) : Color.blue)
+                                .background(runSession.isSaving || runSaved ? Color.blue.opacity(0.5) : Color.blue)
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
                                 .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 5)
                         }
-                        .disabled(runSession.isSaving)
+                        .disabled(runSession.isSaving || runSaved)
                     }
 
                     // Strava Export Button (visible when logged into Strava and TCX data exists)
@@ -682,7 +730,9 @@ struct RunInfoView: View {
         .onReceive(timer) { _ in
             if !runSession.isTimerPaused {
                 runSession.currentTimer = Date().timeIntervalSince(runSession.runStartDate) - runSession.pausedDuration
-                let tick = Int(runSession.currentTimer * 10)
+                let rawTick = runSession.currentTimer * 10
+                guard rawTick.isFinite, rawTick >= 0 else { return }
+                let tick = Int(rawTick)
                 // Update pace and Live Activity every 3 seconds
                 if tick % 30 == 0 {
                     if runSession.activityType == .cycling {
@@ -707,17 +757,12 @@ struct RunInfoView: View {
                 }
                 // Persist run snapshot every 10 seconds
                 if tick % 100 == 0, inRunningMode {
-                    let snapshot = runSession.buildSnapshot(locationManager: locationManager)
+                    let snapshot = runSession.buildSnapshot(locationManager: locationManager, selectedRouteID: selectedRoute?.id)
                     RunPersistenceService.save(snapshot)
                 }
             }
         }
-        .onChange(of: showAlert) { newValue in
-            if !newValue && runSession.isSaving {
-                clearRunInformation()
-                runSession.runData = Run(time: 0, distance: 0, averagePace: "", caloriesBurned: 0, dateString: "", startTime: Date())
-            }
-        }
+        .onChange(of: showAlert) { _ in }
         .fullScreenCover(isPresented: $isImagePickerPresented) {
             ImagePicker(sourceType: .camera) { image in
                 if let image = image { saveImageToPhotoLibrary(image: image) }
@@ -839,7 +884,7 @@ struct RunInfoView: View {
         runSession.startLiveActivity(activityType: runSession.activityType, isRouteRun: selectedRoute != nil)
 
         // Save initial snapshot so even a very early crash is recoverable
-        let snapshot = runSession.buildSnapshot(locationManager: locationManager)
+        let snapshot = runSession.buildSnapshot(locationManager: locationManager, selectedRouteID: selectedRoute?.id)
         RunPersistenceService.save(snapshot)
 
         // Start multiplayer session only if a route is selected
@@ -865,7 +910,7 @@ struct RunInfoView: View {
 
         // Capture run locations and TCX data before stopping tracking (which resets location state)
         runSession.runLocations = locationManager.runLocations
-        print("[RunInfoView] finishRun — captured \(runSession.runLocations.count) locations from LocationManager")
+        AppLogger.run.info("finishRun — captured \(runSession.runLocations.count) locations from LocationManager")
         locationManager.stopRunTracking()
         let elapsedSeconds = Double(minute) * 60.0 + (Double(seconds) ?? 0)
         let distanceMeters = locationManager.distance
@@ -904,7 +949,7 @@ struct RunInfoView: View {
         runSession.runData.time = Double(runSession.prevRunMinute) + (Double(runSession.prevRunSecond) ?? 0)/60
         runSession.runData.dateString = dateFormatter.string(from: runSession.currentDate)
 
-        print("[RunInfoView] saveRunAction — passing \(runSession.runLocations.count) locations to HealthStore")
+        AppLogger.run.info("saveRunAction — passing \(runSession.runLocations.count) locations to HealthStore")
         healthStore.saveRun(
             startTime: runSession.runData.startTime,
             endTime: Date(),
@@ -915,6 +960,8 @@ struct RunInfoView: View {
             elevationGainMeters: runSession.prevRunElevationGain
         ) { success, error in
             if success {
+                self.runSession.isSaving = false
+                self.runSaved = true
                 self.showAlert = true
                 self.alertTitle = "Saved!"
                 self.alertDetails = "Your workout was saved to Apple Health."
@@ -922,6 +969,7 @@ struct RunInfoView: View {
                     self.healthStore.weeklyDistances = distances
                 }
             } else {
+                self.runSession.isSaving = false
                 self.showAlert = true
                 self.alertTitle = "Save Failed"
                 self.alertDetails = "Could not save to Apple Health. Please try again."
@@ -970,7 +1018,7 @@ struct RunInfoView: View {
                 do {
                     try gpxString.write(to: fileURL, atomically: true, encoding: .utf8)
                 } catch {
-                    print("Error saving GPX file locally: \(error)")
+                    AppLogger.persistence.error("Error saving GPX file locally: \(error)")
                 }
 
                 // Create local route
@@ -1011,6 +1059,7 @@ struct RunInfoView: View {
                     ) { _, _ in }
 
                     self.isPublishing = false
+                    self.clearRunInformation()
                     self.showAlert = true
                     self.alertTitle = "Route Shared!"
                     self.alertDetails = "Your run has been shared as \"\(name)\" and saved to Apple Health."
@@ -1113,7 +1162,7 @@ struct RunInfoView: View {
                     downloadingSearchRouteID = nil
                 }
             } catch {
-                print("Error saving downloaded route: \(error)")
+                AppLogger.routes.error("Error saving downloaded route: \(error)")
                 DispatchQueue.main.async { downloadingSearchRouteID = nil }
             }
         }
@@ -1129,6 +1178,7 @@ struct RunInfoView: View {
         runSession.isSaving = false
         runSession.runLocations = []
         hasSubmittedLeaderboardEntry = false
+        runSaved = false
         RunPersistenceService.clear()
     }
 

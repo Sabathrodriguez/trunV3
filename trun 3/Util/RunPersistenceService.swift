@@ -53,45 +53,73 @@ struct RunSnapshot: Codable {
     // Activity type
     let activityTypeRawValue: UInt // HKWorkoutActivityType.rawValue
 
+    // Route (nil if no route was selected)
+    var selectedRouteID: Double?
+
     // Snapshot metadata
     let savedAt: Double            // timeIntervalSince1970
 }
 
-enum RunPersistenceService {
+// MARK: - Protocol
 
-    private static var storageURL: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-        return appSupport.appendingPathComponent("active_run_snapshot.json")
+/// Abstraction over persistence so tests can inject a mock store.
+protocol PersistenceStore {
+    func save(_ snapshot: RunSnapshot)
+    func load() -> RunSnapshot?
+    func clear()
+    func hasActiveRun() -> Bool
+}
+
+// MARK: - Concrete Implementation
+
+final class RunPersistenceService: PersistenceStore {
+
+    /// Production shared instance.
+    static let shared = RunPersistenceService()
+
+    private let fileManager: FileManager
+    private let storageURL: URL
+
+    init(fileManager: FileManager = .default, directory: URL? = nil) {
+        self.fileManager = fileManager
+        let base = directory ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? fileManager.createDirectory(at: base, withIntermediateDirectories: true)
+        self.storageURL = base.appendingPathComponent("active_run_snapshot.json")
     }
 
-    static func save(_ snapshot: RunSnapshot) {
+    func save(_ snapshot: RunSnapshot) {
         do {
             let data = try JSONEncoder().encode(snapshot)
             try data.write(to: storageURL, options: .atomic)
         } catch {
-            print("[RunPersistence] Failed to save snapshot: \(error)")
+            AppLogger.persistence.error("Failed to save run snapshot: \(error)")
         }
     }
 
-    static func load() -> RunSnapshot? {
-        guard FileManager.default.fileExists(atPath: storageURL.path) else {
-            return nil
-        }
+    func load() -> RunSnapshot? {
+        guard fileManager.fileExists(atPath: storageURL.path) else { return nil }
         do {
             let data = try Data(contentsOf: storageURL)
             return try JSONDecoder().decode(RunSnapshot.self, from: data)
         } catch {
-            print("[RunPersistence] Failed to load snapshot: \(error)")
+            AppLogger.persistence.error("Failed to load run snapshot: \(error)")
             return nil
         }
     }
 
-    static func clear() {
-        try? FileManager.default.removeItem(at: storageURL)
+    func clear() {
+        try? fileManager.removeItem(at: storageURL)
     }
 
-    static func hasActiveRun() -> Bool {
-        FileManager.default.fileExists(atPath: storageURL.path)
+    func hasActiveRun() -> Bool {
+        fileManager.fileExists(atPath: storageURL.path)
     }
+
+    // MARK: - Static Convenience (delegates to shared instance)
+    // These allow existing call sites to remain unchanged while tests use DI.
+
+    static func save(_ snapshot: RunSnapshot) { shared.save(snapshot) }
+    static func load() -> RunSnapshot? { shared.load() }
+    static func clear() { shared.clear() }
+    static func hasActiveRun() -> Bool { shared.hasActiveRun() }
 }

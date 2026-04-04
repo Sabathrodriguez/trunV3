@@ -8,7 +8,7 @@
 import HealthKit
 import CoreLocation
 
-class HealthStore: ObservableObject {
+class HealthStore: NSObject, ObservableObject, HKWorkoutSessionDelegate {
 
     let healthStore = HKHealthStore()
     @Published var weeklyDistances: [HKWorkoutActivityType: Double] = [.running: 0, .walking: 0, .cycling: 0]
@@ -21,12 +21,20 @@ class HealthStore: ObservableObject {
     func startWorkoutSession(activityType: HKWorkoutActivityType) {
         guard #available(iOS 26.0, *) else { return }
 
+        // If Watch starts a workout while ours is running, end ours to prevent conflict.
+        // Background location (CLLocationManager) keeps the app alive regardless.
+        healthStore.workoutSessionMirroringStartHandler = { [weak self] _ in
+            AppLogger.health.info("Apple Watch workout started mid-run — releasing phone session to avoid conflict")
+            DispatchQueue.main.async { self?.endWorkoutSession() }
+        }
+
         let config = HKWorkoutConfiguration()
         config.activityType = activityType
         config.locationType = .outdoor
 
         do {
             let session = try HKWorkoutSession(healthStore: healthStore, configuration: config)
+            session.delegate = self
             let builder = session.associatedWorkoutBuilder()
             builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: config)
 
@@ -35,9 +43,13 @@ class HealthStore: ObservableObject {
 
             self._workoutSession = session
             self._liveBuilder = builder
-            print("[HealthStore] Workout session started for background protection")
+            AppLogger.health.info("Workout session started for background protection")
+        } catch let hkError as HKError where hkError.code == .errorAnotherWorkoutSessionStarted {
+            // Apple Watch already has an active workout — skip the phone-side session.
+            // CLLocationManager background updates keep the app alive during the run.
+            AppLogger.health.info("Apple Watch has an active workout — skipping phone-side session, relying on background location")
         } catch {
-            print("[HealthStore] Failed to start workout session: \(error)")
+            AppLogger.health.error("Failed to start workout session: \(error)")
         }
     }
 
@@ -52,7 +64,7 @@ class HealthStore: ObservableObject {
             builder?.discardWorkout()
             self?._workoutSession = nil
             self?._liveBuilder = nil
-            print("[HealthStore] Workout session ended and discarded")
+            AppLogger.health.info("Workout session ended and discarded")
         }
     }
 
@@ -156,20 +168,20 @@ class HealthStore: ObservableObject {
                         }
 
                         // 7. Attach route data if locations were captured
-                        print("[HealthStore] Workout saved. Route locations count: \(routeLocations.count)")
+                        AppLogger.health.info("Workout saved. Route locations count: \(routeLocations.count)")
                         if !routeLocations.isEmpty {
                             self.addRouteToWorkout(workout: workout, locations: routeLocations) { routeSuccess, routeError in
                                 if routeSuccess {
-                                    print("[HealthStore] Route saved successfully with \(routeLocations.count) points")
+                                    AppLogger.health.info("Route saved successfully with \(routeLocations.count) points")
                                 } else {
-                                    print("[HealthStore] Failed to save route: \(routeError?.localizedDescription ?? "unknown error")")
+                                    AppLogger.health.error("Failed to save route: \(routeError?.localizedDescription ?? "unknown error")")
                                 }
                                 DispatchQueue.main.async {
                                     completion(true, nil)
                                 }
                             }
                         } else {
-                            print("[HealthStore] No route locations to save")
+                            AppLogger.health.debug("No route locations to save")
                             DispatchQueue.main.async {
                                 completion(true, nil)
                             }
@@ -195,6 +207,29 @@ class HealthStore: ObservableObject {
         }
     }
 
+    // MARK: - HKWorkoutSessionDelegate (observes watch-conflict session failures)
+
+    @available(iOS 17.0, *)
+    func workoutSession(_ session: HKWorkoutSession, didFailWithError error: Error) {
+        AppLogger.health.error("Workout session failed (Apple Watch conflict?): \(error)")
+        _workoutSession = nil
+        _liveBuilder = nil
+    }
+
+    @available(iOS 17.0, *)
+    func workoutSession(
+        _ session: HKWorkoutSession,
+        didChangeTo toState: HKWorkoutSessionState,
+        from fromState: HKWorkoutSessionState,
+        date: Date
+    ) {
+        AppLogger.health.debug("Workout session state: \(fromState.rawValue) → \(toState.rawValue)")
+        if toState == .stopped || toState == .ended {
+            _workoutSession = nil
+            _liveBuilder = nil
+        }
+    }
+
     func fetchWeeklyDistances(completion: @escaping ([HKWorkoutActivityType: Double]) -> Void) {
         let calendar = Calendar.current
         let now = Date()
@@ -214,20 +249,20 @@ class HealthStore: ObservableObject {
             ]
 
             if let error = error {
-                print("[WeeklyDistances] Query error: \(error.localizedDescription)")
+                AppLogger.health.error("Weekly distances query error: \(error.localizedDescription)")
             }
 
             guard let workouts = samples as? [HKWorkout] else {
-                print("[WeeklyDistances] No workout samples returned")
+                AppLogger.health.debug("No workout samples returned for weekly distances")
                 DispatchQueue.main.async { completion(distances) }
                 return
             }
 
-            print("[WeeklyDistances] Found \(workouts.count) workouts this week")
+            AppLogger.health.debug("Found \(workouts.count) workouts this week")
 
             for workout in workouts {
                 let type = workout.workoutActivityType
-                print("[WeeklyDistances] Workout: type=\(type.rawValue), totalDistance=\(String(describing: workout.totalDistance))")
+                AppLogger.health.debug("Workout: type=\(type.rawValue), totalDistance=\(String(describing: workout.totalDistance))")
                 if let totalDistance = workout.totalDistance {
                     let miles = totalDistance.doubleValue(for: .mile())
                     if distances.keys.contains(type) {

@@ -13,6 +13,7 @@ import FirebaseAuth
 import FirebaseDatabase
 import FirebaseFirestore
 import FirebaseAppCheck
+import FirebaseCrashlytics
 
 class TrunAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
     func createProvider(with app: FirebaseApp) -> (any AppCheckProvider)? {
@@ -30,13 +31,14 @@ struct trunApp: App {
         let providerFactory = TrunAppCheckProviderFactory()
         AppCheck.setAppCheckProviderFactory(providerFactory)
         FirebaseApp.configure()
+        Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
 
         // Debug: check if App Check can get a token
         AppCheck.appCheck().token(forcingRefresh: true) { token, error in
             if let error = error {
-                print("APP CHECK TOKEN ERROR: \(error)")
+                AppLogger.auth.error("App Check token error: \(error)")
             } else if let token = token {
-                print("APP CHECK TOKEN SUCCESS: \(token.token.prefix(20))...")
+                AppLogger.auth.debug("App Check token OK: \(token.token.prefix(20))...")
             }
         }
         

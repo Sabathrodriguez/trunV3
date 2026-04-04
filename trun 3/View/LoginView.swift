@@ -191,9 +191,9 @@ struct LoginView: View {
     func resetPassword() {
         Auth.auth().sendPasswordReset(withEmail: username) { error in
             if let error = error {
-                print("Unable to reset password: \(error.localizedDescription)")
+                AppLogger.auth.error("Unable to reset password: \(error.localizedDescription)")
             } else {
-                print("Successfully sent password reset email!")
+                AppLogger.auth.info("Password reset email sent")
                 forgotpassword = false
             }
         }
@@ -201,7 +201,7 @@ struct LoginView: View {
     
     func googleOauth() async throws {
         guard let clientID = FirebaseApp.app()?.options.clientID else {
-            print("No Firebase client ID found")
+            AppLogger.auth.fault("No Firebase client ID found in app options")
             return
         }
         
@@ -210,14 +210,14 @@ struct LoginView: View {
         
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootViewController = windowScene.windows.first?.rootViewController else {
-            print("No root view controller found")
+            AppLogger.auth.fault("No root view controller found for Google sign-in")
             return
         }
         
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
         let user = result.user
         guard let idToken = user.idToken?.tokenString else {
-            print("ID token missing")
+            AppLogger.auth.error("Google sign-in: ID token missing")
             return
         }
         
@@ -267,10 +267,10 @@ struct LoginView: View {
     func signIn(email: String, password: String) {
         Auth.auth().signIn(withEmail: email, password: password) { authResult, error in
             if let error = error {
-                print("Error signing in: \(error.localizedDescription)")
+                AppLogger.auth.error("Error signing in: \(error.localizedDescription)")
             } else {
                 loginManager.isLoggedIn = true
-                print("User signed in successfully")
+                AppLogger.auth.info("User signed in successfully")
             }
         }
     }
@@ -280,7 +280,7 @@ struct LoginView: View {
               let nonce = currentNonce,
               let appleIDToken = appleIDCredential.identityToken,
               let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            print("Unable to fetch Apple ID token")
+            AppLogger.auth.error("Unable to fetch Apple ID token")
             return
         }
 
