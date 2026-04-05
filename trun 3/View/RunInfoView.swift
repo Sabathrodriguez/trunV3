@@ -218,8 +218,8 @@ struct RunInfoView: View {
                             .disabled(stravaButtonDisabled)
                         }
 
-                        // Share as Route button (free runs only)
-                        if selectedRoute == nil && !runSession.runLocations.isEmpty {
+                        // Share as Route button (free runs and unshared route runs)
+                        if (selectedRoute == nil || selectedRoute?.sharedRouteID == nil) && !runSession.runLocations.isEmpty {
                             Button(action: {
                                 shareRouteName = ""
                                 showShareRoutePrompt = true
@@ -309,8 +309,8 @@ struct RunInfoView: View {
                     .disabled(stravaButtonDisabled)
                     }
 
-                    // Share as Route button (free runs only)
-                    if selectedRoute == nil && !runSession.runLocations.isEmpty {
+                    // Share as Route button (free runs and unshared route runs)
+                    if (selectedRoute == nil || selectedRoute?.sharedRouteID == nil) && !runSession.runLocations.isEmpty {
                         Button(action: {
                             shareRouteName = ""
                             showShareRoutePrompt = true
