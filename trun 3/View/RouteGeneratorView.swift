@@ -22,7 +22,7 @@ struct RouteGeneratorView: View {
     @State private var showFileExporter: Bool = false
     @State private var gpxDocumentToExport: GPXDocument?
     @State private var exportFileName: String = "route"
-    @State private var remainingGenerations: Int = RouteRateLimitService.remainingToday
+    @State private var remainingGenerations: Int = RouteRateLi`mitService.remainingToday
 
     var body: some View {
         NavigationView {

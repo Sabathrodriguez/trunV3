@@ -13,6 +13,9 @@ class HealthStore: NSObject, ObservableObject, HKWorkoutSessionDelegate {
     let healthStore = HKHealthStore()
     @Published var weeklyDistances: [HKWorkoutActivityType: Double] = [.running: 0, .walking: 0, .cycling: 0]
 
+    /// True when an Apple Watch recorded the same workout, so the phone should skip saving to avoid duplicates.
+    @Published var watchRecordedWorkout = false
+
     // MARK: - Live Workout Session (background protection, iOS 26+)
     private var _workoutSession: Any?
     private var _liveBuilder: Any?
@@ -20,12 +23,16 @@ class HealthStore: NSObject, ObservableObject, HKWorkoutSessionDelegate {
     /// Start an HKWorkoutSession so iOS keeps the app alive in the background.
     func startWorkoutSession(activityType: HKWorkoutActivityType) {
         guard #available(iOS 26.0, *) else { return }
+        watchRecordedWorkout = false
 
         // If Watch starts a workout while ours is running, end ours to prevent conflict.
         // Background location (CLLocationManager) keeps the app alive regardless.
         healthStore.workoutSessionMirroringStartHandler = { [weak self] _ in
             AppLogger.health.info("Apple Watch workout started mid-run — releasing phone session to avoid conflict")
-            DispatchQueue.main.async { self?.endWorkoutSession() }
+            DispatchQueue.main.async {
+                self?.watchRecordedWorkout = true
+                self?.endWorkoutSession()
+            }
         }
 
         let config = HKWorkoutConfiguration()
@@ -47,6 +54,7 @@ class HealthStore: NSObject, ObservableObject, HKWorkoutSessionDelegate {
         } catch let hkError as HKError where hkError.code == .errorAnotherWorkoutSessionStarted {
             // Apple Watch already has an active workout — skip the phone-side session.
             // CLLocationManager background updates keep the app alive during the run.
+            self.watchRecordedWorkout = true
             AppLogger.health.info("Apple Watch has an active workout — skipping phone-side session, relying on background location")
         } catch {
             AppLogger.health.error("Failed to start workout session: \(error)")
@@ -114,6 +122,13 @@ class HealthStore: NSObject, ObservableObject, HKWorkoutSessionDelegate {
     }
     
     func saveRun(startTime: Date, endTime: Date, distanceInMiles: Double, calories: Double, activityType: HKWorkoutActivityType, routeLocations: [CLLocation] = [], elevationGainMeters: Double = 0, completion: @escaping (Bool, Error?) -> Void) {
+
+        // Skip saving if Apple Watch already recorded this workout to avoid duplicate data
+        if watchRecordedWorkout {
+            AppLogger.health.info("Apple Watch recorded this workout — skipping phone-side save to avoid duplicate")
+            DispatchQueue.main.async { completion(true, nil) }
+            return
+        }
 
         // 1. Create the workout configuration
         let configuration = HKWorkoutConfiguration()
