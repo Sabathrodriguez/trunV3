@@ -107,6 +107,17 @@ struct RouteGeneratorView: View {
                 .disabled(userInput.isEmpty || generationService.isGenerating || remainingGenerations <= 0)
                 .padding(.horizontal)
 
+                if let googleErr = generationService.googleError {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Google Routes failed: \(googleErr)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                }
+
                 if !generationService.routeOptions.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Choose a route")

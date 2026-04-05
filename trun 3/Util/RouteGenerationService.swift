@@ -17,6 +17,7 @@ class RouteGenerationService: ObservableObject {
     @Published var isGenerating: Bool = false
     @Published var generationProgress: String = ""
     @Published var routeOptions: [RouteOption] = []
+    @Published var googleError: String?
 
     private let nlpParser = RouteNLPParser()
     private let waypointGenerator = WaypointGenerator()
@@ -53,6 +54,7 @@ class RouteGenerationService: ObservableObject {
             isGenerating = true
             generationProgress = "Understanding your request..."
             routeOptions = []
+            googleError = nil
         }
 
         do {
@@ -286,7 +288,9 @@ class RouteGenerationService: ObservableObject {
                 distanceMiles: finalDistance
             )
         } catch {
-            AppLogger.routes.error("Google Routes failed: \(error.localizedDescription)")
+            let message = error.localizedDescription
+            AppLogger.routes.error("Google Routes failed: \(message)")
+            await MainActor.run { googleError = message }
             return nil
         }
     }
