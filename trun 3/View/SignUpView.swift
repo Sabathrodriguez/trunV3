@@ -259,6 +259,8 @@ struct SignUpView: View {
             batch.commit { firestoreError in
                 if let firestoreError = firestoreError {
                     AppLogger.auth.error("Error saving user data to Firestore: \(firestoreError.localizedDescription)")
+                } else {
+                    AnalyticsService.logSignUp(method: "email")
                 }
             }
         }

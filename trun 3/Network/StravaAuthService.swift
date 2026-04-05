@@ -121,6 +121,7 @@ class StravaAuthService: NSObject, ObservableObject {
         self.expiresAt = expiresAt
 
         saveTokensToKeychain()
+        AnalyticsService.logStravaConnected()
 
         DispatchQueue.main.async {
             self.isAuthenticated = true

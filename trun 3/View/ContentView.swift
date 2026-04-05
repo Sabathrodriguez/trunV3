@@ -766,7 +766,7 @@ struct ContentView: View {
                             ) { result in
                                 switch result {
                                 case .success(_):
-                                    break
+                                    AnalyticsService.logRouteShared()
                                 case .failure(let error):
                                     alertTitle = "Upload Failed"
                                     alertDetails = error.localizedDescription
@@ -887,6 +887,7 @@ struct ContentView: View {
         runningMenuHeight = .height(350)
         recoveredSnapshot = nil
 
+        AnalyticsService.logRunResumed()
         AppLogger.run.info("Resumed interrupted run — \(locations.count) locations, \(String(format: "%.2f", snapshot.distance * 0.000621371)) miles")
     }
 
@@ -957,6 +958,7 @@ struct ContentView: View {
             pendingDistance = distanceMiles
             routeName = url.deletingPathExtension().lastPathComponent
             showRouteNamePrompt = true
+            AnalyticsService.logRouteImported()
         } catch let error as GPXValidator.ValidationError {
             alertTitle = "Invalid GPX File"
             alertDetails = error.errorDescription ?? "The file could not be validated."

@@ -828,10 +828,12 @@ struct RunInfoView: View {
         Task {
             do {
                 let activityID = try await stravaUploadService.uploadRun(tcxString: tcx, name: runName)
+                AnalyticsService.logStravaUpload(success: true)
                 await MainActor.run {
                     runSession.runData.stravaActivityID = activityID
                 }
             } catch {
+                AnalyticsService.logStravaUpload(success: false)
                 await MainActor.run {
                     stravaUploadService.uploadStatus = .error(error.localizedDescription)
                 }
@@ -880,6 +882,11 @@ struct RunInfoView: View {
         // Start HKWorkoutSession for background protection
         healthStore.startWorkoutSession(activityType: runSession.activityType)
 
+        AnalyticsService.logRunStarted(
+            activityType: runSession.activityType.name,
+            isRouteRun: selectedRoute != nil
+        )
+
         // Start Live Activity
         runSession.startLiveActivity(activityType: runSession.activityType, isRouteRun: selectedRoute != nil)
 
@@ -924,6 +931,12 @@ struct RunInfoView: View {
         generator.selectionChanged()
         runSession.isRunDone = true
         runningMenuHeight = .height(250)
+
+        AnalyticsService.logRunCompleted(
+            distanceMiles: runSession.prevRunDistance,
+            durationSeconds: elapsedSeconds,
+            activityType: runSession.activityType.name
+        )
 
         // End workout session, Live Activity, and clear persistence snapshot
         healthStore.endWorkoutSession()
@@ -1058,6 +1071,7 @@ struct RunInfoView: View {
                         elevationGainMeters: self.runSession.prevRunElevationGain
                     ) { _, _ in }
 
+                    AnalyticsService.logRunSharedAsRoute()
                     self.isPublishing = false
                     self.clearRunInformation()
                     self.showAlert = true

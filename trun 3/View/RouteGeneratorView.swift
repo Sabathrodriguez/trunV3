@@ -22,7 +22,7 @@ struct RouteGeneratorView: View {
     @State private var showFileExporter: Bool = false
     @State private var gpxDocumentToExport: GPXDocument?
     @State private var exportFileName: String = "route"
-    @State private var remainingGenerations: Int = RouteRateLi`mitService.remainingToday
+    @State private var remainingGenerations: Int = RouteRateLimitService.remainingToday
 
     var body: some View {
         NavigationView {
@@ -321,6 +321,10 @@ struct RouteGeneratorView: View {
                     // Auto-select the first option
                     if let first = generationService.routeOptions.first {
                         selectedOption = first
+                        AnalyticsService.logRouteGenerated(
+                            distanceMiles: first.distanceMiles,
+                            routeType: selectedActivityType.rawValue
+                        )
                     }
                 }
             } catch {
@@ -374,6 +378,7 @@ struct RouteGeneratorView: View {
             }
 
             selectedRoute = newRoute
+            AnalyticsService.logRouteSaved()
             isPresented = false
         } catch {
             errorMessage = "Could not save route: \(error.localizedDescription)"

@@ -223,6 +223,7 @@ struct LoginView: View {
         
         let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: user.accessToken.tokenString)
         let _ = try await Auth.auth().signIn(with: credential)
+        AnalyticsService.logLogin(method: "google")
         loginManager.isLoggedIn = true
     }
         
@@ -269,6 +270,7 @@ struct LoginView: View {
             if let error = error {
                 AppLogger.auth.error("Error signing in: \(error.localizedDescription)")
             } else {
+                AnalyticsService.logLogin(method: "email")
                 loginManager.isLoggedIn = true
                 AppLogger.auth.info("User signed in successfully")
             }
@@ -290,6 +292,7 @@ struct LoginView: View {
             fullName: appleIDCredential.fullName
         )
         let _ = try await Auth.auth().signIn(with: credential)
+        AnalyticsService.logLogin(method: "apple")
         loginManager.isLoggedIn = true
     }
 

@@ -26,6 +26,7 @@ struct ProfileView: View {
     @ObservedObject private var stravaAuth = StravaAuthService.shared
     
     @AppStorage("showMusicPlayer") private var showMusicPlayer: Bool = true
+    @ObservedObject private var consentManager = AnalyticsConsentManager.shared
 
     private var userEmail: String {
         Auth.auth().currentUser?.email ?? "No email"
@@ -234,6 +235,22 @@ struct ProfileView: View {
                 }
             }
             .padding(.horizontal)
+
+            Section(header: Text("Privacy")) {
+                Toggle(isOn: $consentManager.consentGranted) {
+                    HStack {
+                        Image(systemName: "chart.bar.xaxis")
+                            .foregroundColor(.blue)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Analytics & Crash Reports")
+                            Text("Help improve TrunRun by sharing usage data and crash reports")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
         }
             Spacer()
         }
@@ -254,7 +271,10 @@ struct ProfileView: View {
                 if let data = try? await newItem.loadTransferable(type: Data.self),
                    let uiImage = UIImage(data: data) {
                     profileService.uploadProfileImage(uiImage) { result in
-                        if case .failure(let error) = result {
+                        switch result {
+                        case .success:
+                            AnalyticsService.logProfilePhotoChanged()
+                        case .failure(let error):
                             errorMessage = error.localizedDescription
                         }
                     }
@@ -312,7 +332,10 @@ struct ProfileView: View {
                 }
                 profileService.saveUsername(trimmed) { result in
                     isSavingUsername = false
-                    if case .failure(let error) = result {
+                    switch result {
+                    case .success:
+                        AnalyticsService.logUsernameSet()
+                    case .failure(let error):
                         usernameAlertTitle = "Error"
                         usernameAlertMessage = error.localizedDescription
                         showUsernameAlert = true

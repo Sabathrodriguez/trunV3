@@ -31,7 +31,7 @@ struct trunApp: App {
         let providerFactory = TrunAppCheckProviderFactory()
         AppCheck.setAppCheckProviderFactory(providerFactory)
         FirebaseApp.configure()
-        Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
+        AnalyticsConsentManager.shared.configure()
 
         // Debug: check if App Check can get a token
         AppCheck.appCheck().token(forcingRefresh: true) { token, error in

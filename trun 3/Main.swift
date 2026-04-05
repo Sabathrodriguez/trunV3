@@ -40,6 +40,7 @@ class LoginManager : ObservableObject {
     }
 
     func logout() {
+        AnalyticsService.logLogout()
         try? Auth.auth().signOut()
     }
 }
@@ -51,22 +52,43 @@ enum AuthScreen {
 
 struct MainView : View {
     @StateObject public var loginManager = LoginManager()
+    @ObservedObject private var consentManager = AnalyticsConsentManager.shared
     @State private var authScreen: AuthScreen = .signIn
+    @State private var showConsentPrompt = false
 
     var body: some View {
-        if loginManager.isLoggedIn {
-            ContentView(loginManager: loginManager)
-        } else {
-            switch authScreen {
-            case .signIn:
-                LoginView(loginManager: loginManager, showSignUp: {
-                    withAnimation { authScreen = .signUp }
-                })
-            case .signUp:
-                SignUpView(loginManager: loginManager, showSignIn: {
-                    withAnimation { authScreen = .signIn }
-                })
+        Group {
+            if loginManager.isLoggedIn {
+                ContentView(loginManager: loginManager)
+            } else {
+                switch authScreen {
+                case .signIn:
+                    LoginView(loginManager: loginManager, showSignUp: {
+                        withAnimation { authScreen = .signUp }
+                    })
+                case .signUp:
+                    SignUpView(loginManager: loginManager, showSignIn: {
+                        withAnimation { authScreen = .signIn }
+                    })
+                }
             }
+        }
+        .onAppear {
+            if !consentManager.hasPromptedUser {
+                showConsentPrompt = true
+            }
+        }
+        .alert("Help Improve TrunRun", isPresented: $showConsentPrompt) {
+            Button("Allow") {
+                consentManager.consentGranted = true
+                consentManager.hasPromptedUser = true
+            }
+            Button("Don't Allow", role: .cancel) {
+                consentManager.consentGranted = false
+                consentManager.hasPromptedUser = true
+            }
+        } message: {
+            Text("We use Firebase Analytics and Crashlytics to understand how the app is used and to fix crashes. No personal data is sold or shared with third parties. You can change this anytime in your profile settings.")
         }
     }
 }
