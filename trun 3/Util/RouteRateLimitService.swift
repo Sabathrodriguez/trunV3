@@ -7,7 +7,7 @@ import Foundation
 
 enum RouteRateLimitService {
 
-    static let dailyLimit = 3
+    static let dailyLimit = 5
 
     private static let countKey = "routeGenerationCount"
     private static let dateKey  = "routeGenerationDate"

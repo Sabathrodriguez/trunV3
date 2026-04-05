@@ -153,6 +153,22 @@ struct RouteGeneratorView: View {
                         .disabled(selectedOption == nil)
                     }
                     .padding(.horizontal)
+
+                    Button(action: { useRouteImmediately() }) {
+                        HStack {
+                            Image(systemName: "figure.run")
+                            Text("Use Route Now")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(selectedOption != nil ? activityColor : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(selectedOption == nil)
+                    .padding(.horizontal)
+
                 }
 
             }
@@ -327,5 +343,41 @@ struct RouteGeneratorView: View {
         gpxDocumentToExport = GPXDocument(text: option.gpxString)
         exportFileName = filename
         showFileExporter = true
+    }
+
+    private func useRouteImmediately() {
+        guard let option = selectedOption else { return }
+
+        do {
+            let name = "AI Route \(Date().formatted(date: .abbreviated, time: .shortened))"
+            let filename = name.replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "/", with: "-")
+                .replacingOccurrences(of: ":", with: "-") + ".gpx"
+
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let destinationURL = documentsURL.appendingPathComponent(filename)
+
+            try option.gpxString.write(to: destinationURL, atomically: true, encoding: .utf8)
+
+            let maxId = routes["Run Detroit"]?.map { $0.id }.max() ?? 0
+            let newRoute = Route(
+                id: maxId + 1,
+                name: name,
+                GPXFileURL: destinationURL.lastPathComponent,
+                color: [0.0, 0.5, 1.0]
+            )
+
+            if routes["Run Detroit"] != nil {
+                routes["Run Detroit"]?.append(newRoute)
+            } else {
+                routes["Run Detroit"] = [newRoute]
+            }
+
+            selectedRoute = newRoute
+            isPresented = false
+        } catch {
+            errorMessage = "Could not save route: \(error.localizedDescription)"
+            showError = true
+        }
     }
 }
