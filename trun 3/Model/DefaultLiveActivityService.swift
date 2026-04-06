@@ -61,8 +61,10 @@ final class DefaultLiveActivityService: LiveActivityManaging {
 
     func update(distanceMiles: Double, pace: String, elapsedSeconds: Double, isPaused: Bool) async {
         guard let activity = currentActivity else { return }
-        // Skip update if activity was ended by the system
-        guard activity.activityState == .active else {
+        // Only stop updating for terminal states. Transient non-active states
+        // (e.g. during background transitions) must not permanently kill updates.
+        let activityState = activity.activityState
+        if activityState == .ended || activityState == .dismissed {
             currentActivity = nil
             return
         }
