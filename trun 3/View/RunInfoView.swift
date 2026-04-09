@@ -890,6 +890,37 @@ struct RunInfoView: View {
         // Start Live Activity
         runSession.startLiveActivity(activityType: runSession.activityType, isRouteRun: selectedRoute != nil)
 
+        // Update the Live Activity from location callbacks so it works in the background
+        // (Timer.publish stops firing when the app is suspended)
+        locationManager.onRunDistanceChanged = { [weak runSession, weak locationManager] distanceMeters in
+            guard let runSession = runSession, let locationManager = locationManager else { return }
+            guard !runSession.isPaused else { return }
+            let miles = distanceMeters * 0.000621371
+            let elapsed = Date().timeIntervalSince(runSession.runStartDate) - runSession.pausedDuration
+            let pace: String
+            let minutes = elapsed / 60.0
+            if runSession.activityType == .cycling {
+                let hours = minutes / 60.0
+                pace = hours > 0 && miles > 0 ? String(format: "%.1f", miles / hours) : "0.0"
+            } else {
+                if miles > 0 {
+                    let minPerMile = minutes / miles
+                    let whole = Int(minPerMile)
+                    let secs = Int((minPerMile - Double(whole)) * 60)
+                    pace = String(format: "%d:%02d", whole, secs)
+                } else {
+                    pace = runSession.prevRunMinPerMile
+                }
+            }
+            runSession.prevRunMinPerMile = pace
+            runSession.updateLiveActivity(
+                distanceMiles: miles,
+                pace: pace,
+                elapsedSeconds: elapsed,
+                isPaused: false
+            )
+        }
+
         // Save initial snapshot so even a very early crash is recoverable
         let snapshot = runSession.buildSnapshot(locationManager: locationManager, selectedRouteID: selectedRoute?.id)
         RunPersistenceService.save(snapshot)
@@ -902,6 +933,7 @@ struct RunInfoView: View {
     }
 
     func finishRun(minute: Int, seconds: String) {
+        locationManager.onRunDistanceChanged = nil
         runSession.prevRunMinute = minute
         runSession.prevRunSecond = seconds
         runSession.prevRunDistance = locationManager.convertToMiles()

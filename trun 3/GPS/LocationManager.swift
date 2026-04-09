@@ -68,6 +68,10 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var elevationGain: Double = 0 // meters
     private var lastRelativeAltitude: Double?
 
+    /// Called whenever distance changes during an active run.
+    /// Fires from didUpdateLocations so it works in the background.
+    var onRunDistanceChanged: ((Double) -> Void)?
+
     init(
         locationProvider: LocationProvider = CLLocationManager(),
         altimeterProvider: AltimeterProvider = CMAltimeter()
@@ -118,6 +122,9 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         if delta > distanceThreshold {
             distance += delta
             previousLocation = location
+            if isRunActive {
+                onRunDistanceChanged?(distance)
+            }
         }
     }
 
