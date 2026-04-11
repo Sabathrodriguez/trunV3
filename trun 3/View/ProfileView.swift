@@ -194,22 +194,22 @@ struct ProfileView: View {
             .padding(.horizontal)
             
             // Database Routes
-            Button(action: {
-                isPresented = false
-                showDBInspector = true
-            }) {
-                HStack {
-                    Image(systemName: "map")
-                    Text("See all TrunRun routes!")
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(12)
-            }
-            .padding(.horizontal)
+//            Button(action: {
+//                isPresented = false
+//                showDBInspector = true
+//            }) {
+//                HStack {
+//                    Image(systemName: "map")
+//                    Text("See all TrunRun routes!")
+//                        .fontWeight(.semibold)
+//                }
+//                .frame(maxWidth: .infinity)
+//                .padding()
+//                .background(Color.blue)
+//                .foregroundColor(.white)
+//                .cornerRadius(12)
+//            }
+//            .padding(.horizontal)
             
             Button(role: .destructive) {
                 loginManager.logout()

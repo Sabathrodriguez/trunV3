@@ -665,66 +665,66 @@ struct ContentView: View {
                                     }
 
                                     // Record/Save Button
-                                    Button(action: {
-                                        if locationManager.isRecording {
-                                            locationManager.stopRecording()
-                                            isProcessingGPX = true
+                                //     Button(action: {
+                                //         if locationManager.isRecording {
+                                //             locationManager.stopRecording()
+                                //             isProcessingGPX = true
 
-                                            Task {
-                                                let gpxString = locationManager.createGPXString()
-                                                let coords = GPXParser().parse(gpxString: gpxString)
-                                                let distance = locationManager.convertToMiles()
+                                //             Task {
+                                //                 let gpxString = locationManager.createGPXString()
+                                //                 let coords = GPXParser().parse(gpxString: gpxString)
+                                //                 let distance = locationManager.convertToMiles()
 
-                                                await MainActor.run {
-                                                    if !gpxString.isEmpty {
-                                                        pendingGPXString = gpxString
-                                                        pendingCoords = coords
-                                                        pendingDistance = distance
-                                                        routeName = ""
-                                                    }
-                                                    gpxDocument = GPXDocument(text: gpxString)
-                                                    isProcessingGPX = false
-                                                    isFileExporterPresented = true
-                                                }
-                                            }
-                                        } else {
-                                            locationManager.startRecording()
-                                        }
-                                    }) {
-                                        Label(locationManager.isRecording ? "Stop & Share" : "Record",
-                                              systemImage: locationManager.isRecording ? "stop.circle.fill" : "record.circle")
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 14)
-                                            .background(locationManager.isRecording ? Color.red : Color.orange)
-                                            .cornerRadius(12)
-                                    }
-                                    .fileExporter(
-                                        isPresented: $isFileExporterPresented,
-                                        document: gpxDocument,
-                                        contentType: UTType(filenameExtension: "gpx") ?? .xml,
-                                        defaultFilename: "MyRun.gpx"
-                                    ) { result in
-                                        if !pendingGPXString.isEmpty {
-                                            // showRouteNamePrompt = true
-                                        }
-                                    }
+                                //                 await MainActor.run {
+                                //                     if !gpxString.isEmpty {
+                                //                         pendingGPXString = gpxString
+                                //                         pendingCoords = coords
+                                //                         pendingDistance = distance
+                                //                         routeName = ""
+                                //                     }
+                                //                     gpxDocument = GPXDocument(text: gpxString)
+                                //                     isProcessingGPX = false
+                                //                     isFileExporterPresented = true
+                                //                 }
+                                //             }
+                                //         } else {
+                                //             locationManager.startRecording()
+                                //         }
+                                //     }) {
+                                //         Label(locationManager.isRecording ? "Stop & Share" : "Record",
+                                //               systemImage: locationManager.isRecording ? "stop.circle.fill" : "record.circle")
+                                //             .font(.subheadline)
+                                //             .fontWeight(.semibold)
+                                //             .foregroundColor(.white)
+                                //             .frame(maxWidth: .infinity)
+                                //             .padding(.vertical, 14)
+                                //             .background(locationManager.isRecording ? Color.red : Color.orange)
+                                //             .cornerRadius(12)
+                                //     }
+                                //     .fileExporter(
+                                //         isPresented: $isFileExporterPresented,
+                                //         document: gpxDocument,
+                                //         contentType: UTType(filenameExtension: "gpx") ?? .xml,
+                                //         defaultFilename: "MyRun.gpx"
+                                //     ) { result in
+                                //         if !pendingGPXString.isEmpty {
+                                //             // showRouteNamePrompt = true
+                                //         }
+                                //     }
 
-                                    // AI Generate Button
-                                    if #available(iOS 26, *) {
-                                        Button(action: { showRouteGenerator = true; runningMenuHeight = .large }) {
-                                            Label("Generate", systemImage: "wand.and.stars")
-                                                .font(.subheadline)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.white)
-                                                .frame(maxWidth: .infinity)
-                                                .padding(.vertical, 14)
-                                                .background(Color.purple)
-                                                .cornerRadius(12)
-                                        }
-                                    }
+                                //     // AI Generate Button
+                                //     if #available(iOS 26, *) {
+                                //         Button(action: { showRouteGenerator = true; runningMenuHeight = .large }) {
+                                //             Label("Generate", systemImage: "wand.and.stars")
+                                //                 .font(.subheadline)
+                                //                 .fontWeight(.semibold)
+                                //                 .foregroundColor(.white)
+                                //                 .frame(maxWidth: .infinity)
+                                //                 .padding(.vertical, 14)
+                                //                 .background(Color.purple)
+                                //                 .cornerRadius(12)
+                                //         }
+                                //     }
                                 }
                                 .padding(.bottom, 30)
                             } // end VStack

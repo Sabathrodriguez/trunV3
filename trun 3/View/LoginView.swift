@@ -204,10 +204,10 @@ struct LoginView: View {
             AppLogger.auth.fault("No Firebase client ID found in app options")
             return
         }
-        
+
         let config = GIDConfiguration(clientID: clientID)
         GIDSignIn.sharedInstance.configuration = config
-        
+
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootViewController = windowScene.windows.first?.rootViewController else {
             AppLogger.auth.fault("No root view controller found for Google sign-in")
