@@ -9,6 +9,7 @@ import SwiftUI
 import PhotosUI
 import FirebaseAuth
 import FirebaseFirestore
+import AuthenticationServices
 
 struct ProfileView: View {
     @ObservedObject var profileService: ProfileService
@@ -23,6 +24,10 @@ struct ProfileView: View {
     @State private var usernameAlertTitle = ""
     @State private var usernameAlertMessage = ""
     @State private var isSavingUsername = false
+    @State private var showDeleteConfirmation = false
+    @State private var isDeletingAccount = false
+    @State private var showPasswordPrompt = false
+    @State private var passwordForDeletion = ""
     @ObservedObject private var stravaAuth = StravaAuthService.shared
     
     @AppStorage("showMusicPlayer") private var showMusicPlayer: Bool = true
@@ -224,6 +229,26 @@ struct ProfileView: View {
                     .cornerRadius(12)
             }
             .padding(.horizontal)
+
+            Button(role: .destructive) {
+                showDeleteConfirmation = true
+            } label: {
+                if isDeletingAccount {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                } else {
+                    Text("Delete Account")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.red)
+                        .cornerRadius(12)
+                }
+            }
+            .disabled(isDeletingAccount)
+            .padding(.horizontal)
             
             Section(header: Text("Run Settings")) {
                 Toggle(isOn: $showMusicPlayer) {
@@ -259,6 +284,30 @@ struct ProfileView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(usernameAlertMessage)
+        }
+        .alert("Delete Account", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                beginDeletion()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will permanently delete your account and all associated data. This action cannot be undone.")
+        }
+        .alert("Enter Password", isPresented: $showPasswordPrompt) {
+            SecureField("Password", text: $passwordForDeletion)
+            Button("Delete Account", role: .destructive) {
+                isDeletingAccount = true
+                loginManager.deleteAccountWithEmail(password: passwordForDeletion) { result in
+                    isDeletingAccount = false
+                    passwordForDeletion = ""
+                    handleDeletionResult(result)
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                passwordForDeletion = ""
+            }
+        } message: {
+            Text("Re-enter your password to confirm account deletion.")
         }
         .onAppear {
             profileService.fetchProfileImageURL()
@@ -344,6 +393,55 @@ struct ProfileView: View {
             }
     }
 
+    private func beginDeletion() {
+        switch loginManager.currentAuthProvider {
+        case .email:
+            showPasswordPrompt = true
+        case .google:
+            isDeletingAccount = true
+            loginManager.deleteAccountWithGoogle { result in
+                isDeletingAccount = false
+                handleDeletionResult(result)
+            }
+        case .apple:
+            let hashedNonce = loginManager.prepareAppleReauth()
+            let provider = ASAuthorizationAppleIDProvider()
+            let request = provider.createRequest()
+            request.requestedScopes = [.email]
+            request.nonce = hashedNonce
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            let delegate = AppleReauthDelegate { result in
+                switch result {
+                case .success(let authorization):
+                    isDeletingAccount = true
+                    loginManager.deleteAccountWithApple(authorization: authorization) { delResult in
+                        isDeletingAccount = false
+                        handleDeletionResult(delResult)
+                    }
+                case .failure(let error):
+                    errorMessage = error.localizedDescription
+                }
+            }
+            // Keep delegate alive for the callback
+            appleReauthDelegate = delegate
+            controller.delegate = delegate
+            controller.performRequests()
+        case .unknown:
+            errorMessage = "Unable to determine sign-in method. Please sign out and sign back in, then try again."
+        }
+    }
+
+    private func handleDeletionResult(_ result: Result<Void, Error>) {
+        switch result {
+        case .success:
+            isPresented = false
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @State private var appleReauthDelegate: AppleReauthDelegate?
+
     private var placeholderImage: some View {
         Image(systemName: "person.circle.fill")
             .resizable()
@@ -359,5 +457,22 @@ struct ProfileView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: creationDate)
+    }
+}
+
+/// Handles the ASAuthorizationController delegate callbacks for Apple re-authentication.
+private class AppleReauthDelegate: NSObject, ASAuthorizationControllerDelegate {
+    let completion: (Result<ASAuthorization, Error>) -> Void
+
+    init(completion: @escaping (Result<ASAuthorization, Error>) -> Void) {
+        self.completion = completion
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        DispatchQueue.main.async { self.completion(.success(authorization)) }
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        DispatchQueue.main.async { self.completion(.failure(error)) }
     }
 }
