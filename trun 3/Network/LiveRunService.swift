@@ -51,31 +51,40 @@ class LiveRunService: ObservableObject {
 
     /// Remove any leftover Firebase entry for the current user across all routes.
     /// Call this on app launch to clean up ghost entries from prior crashes.
-    func cleanupOwnStaleEntries() {
-        guard let uid = currentUID else { return }
+    func cleanupOwnStaleEntries(completion: (() -> Void)? = nil) {
+        guard let uid = currentUID else { completion?(); return }
 
         let activeRunsRef = dbRef.child("activeRuns")
         activeRunsRef.observeSingleEvent(of: .value) { snapshot in
+            let group = DispatchGroup()
             for routeChild in snapshot.children {
                 guard let routeSnapshot = routeChild as? DataSnapshot else { continue }
                 if routeSnapshot.hasChild(uid) {
-                    activeRunsRef.child(routeSnapshot.key).child(uid).removeValue()
+                    group.enter()
+                    activeRunsRef.child(routeSnapshot.key).child(uid).removeValue { _, _ in
+                        group.leave()
+                    }
                     AppLogger.network.info("Cleaned up stale entry for \(uid) in route \(routeSnapshot.key)")
                 }
+            }
+            group.notify(queue: .main) {
+                completion?()
             }
         }
     }
 
     // MARK: - Start Live Session
 
-    func startSession(routeID: Double, routeCoordinates: [CLLocationCoordinate2D]) {
+    func startSession(routeID: Double, sharedRouteID: String? = nil, routeCoordinates: [CLLocationCoordinate2D]) {
         guard let uid = currentUID else { return }
         if isSessionActive { stopSession() }
 
-        let routeKey = String(Int(routeID))
+        let routeKey = sharedRouteID ?? String(Int(routeID))
         self.currentRouteID = routeKey
         self.routeCoordinates = routeCoordinates
         precomputeRouteDistances()
+
+        AppLogger.network.info("LiveRun session starting — routeKey: \(routeKey), uid: \(uid), fromSharedID: \(sharedRouteID != nil)")
 
         // Clear previous state
         runnersDict.removeAll()
@@ -128,6 +137,7 @@ class LiveRunService: ObservableObject {
             data["n"] = name
         }
         userRef?.updateChildValues(data)
+        AppLogger.network.debug("LiveRun published location — progress: \(String(format: "%.2f", progress))")
 
         // Update the local runner entry for the current user
         if let uid = currentUID, let routeID = currentRouteID {
@@ -149,6 +159,8 @@ class LiveRunService: ObservableObject {
     // MARK: - Stop Session
 
     func stopSession() {
+        let routeKey = currentRouteID ?? "nil"
+        AppLogger.network.info("LiveRun session stopping — routeKey: \(routeKey)")
         // Deactivate session first to prevent callbacks from re-populating state
         isSessionActive = false
 
@@ -203,6 +215,7 @@ class LiveRunService: ObservableObject {
         removedHandle = ref.observe(.childRemoved) { [weak self] snapshot in
             guard let self = self, self.isSessionActive else { return }
             let uid = snapshot.key
+            AppLogger.network.info("LiveRun runner removed — uid: \(uid)")
             self.runnersDict.removeValue(forKey: uid)
             self.joinOrder.removeAll { $0 == uid }
             self.publishRunners()
@@ -218,6 +231,8 @@ class LiveRunService: ObservableObject {
 
         // Skip the current user — we manage their entry locally in publishLocation
         if uid == currentUID { return }
+
+        AppLogger.network.debug("LiveRun runner update — uid: \(uid), progress: \(data["p"] as? Double ?? 0)")
 
         // Check staleness — Firebase server timestamps are in milliseconds
         if let timestamp = data["t"] as? Double {
