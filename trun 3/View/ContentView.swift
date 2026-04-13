@@ -877,10 +877,13 @@ struct ContentView: View {
         }
 
         // Restart multiplayer session if a route is selected
-        liveRunService.cleanupOwnStaleEntries()
-        if let route = selectedRoute {
-            let routeCoords = routeConverter.convertGPXToRoute(filePath: route.GPXFileURL) ?? []
-            liveRunService.startSession(routeID: route.id, routeCoordinates: routeCoords)
+        let routeToResume = selectedRoute
+        let converter = routeConverter
+        liveRunService.cleanupOwnStaleEntries {
+            if let route = routeToResume {
+                let routeCoords = converter.convertGPXToRoute(filePath: route.GPXFileURL) ?? []
+                liveRunService.startSession(routeID: route.id, sharedRouteID: route.sharedRouteID, routeCoordinates: routeCoords)
+            }
         }
 
         inRunningMode = true

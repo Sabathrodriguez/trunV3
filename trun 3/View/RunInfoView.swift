@@ -928,7 +928,7 @@ struct RunInfoView: View {
         // Start multiplayer session only if a route is selected
         if let route = selectedRoute {
             let routeCoords = GPXToRoute().convertGPXToRoute(filePath: route.GPXFileURL) ?? []
-            liveRunService.startSession(routeID: route.id, routeCoordinates: routeCoords)
+            liveRunService.startSession(routeID: route.id, sharedRouteID: route.sharedRouteID, routeCoordinates: routeCoords)
         }
     }
 
