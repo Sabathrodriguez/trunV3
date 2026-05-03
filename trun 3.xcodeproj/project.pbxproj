@@ -24,6 +24,7 @@
 		10E9829A2D61A6AB00358D21 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 10E982992D61A6AB00358D21 /* FirebaseDatabase */; };
 		10E9829C2D61A6B100358D21 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 10E9829B2D61A6B100358D21 /* FirebaseAuth */; };
 		10E9829E2D61A6CD00358D21 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 10E9829D2D61A6CD00358D21 /* FirebaseFirestore */; };
+		10F14CA32F8F2B2100E0E22E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 10F14CA22F8F2B2100E0E22E /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +64,7 @@
 		10866B9E2F75525B0054B530 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		10866BA02F75525B0054B530 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		10E9823A2D61A5FB00358D21 /* trun 3.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "trun 3.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		10F14CA22F8F2B2100E0E22E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = "trun 3/PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
 		CC0001002D61A5FB00358D21 /* trun 3Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "trun 3Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -160,6 +162,7 @@
 		10E982312D61A5FB00358D21 = {
 			isa = PBXGroup;
 			children = (
+				10F14CA22F8F2B2100E0E22E /* PrivacyInfo.xcprivacy */,
 				101DFA512F79DD5B0042A9DE /* trun 3Tests.xctestplan */,
 				10E9823C2D61A5FB00358D21 /* trun 3 */,
 				10866BA22F75525B0054B530 /* RunActivityWidget */,
@@ -317,6 +320,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				10F14CA32F8F2B2100E0E22E /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

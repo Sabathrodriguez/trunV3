@@ -211,20 +211,33 @@ struct ContentView: View {
                 .onAppear {
                     viewModel.checkIfLocationServicesEnabled()
                     profileService.fetchProfileImageURL()
+                    
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         requestHealthKitAccess()
                     }
+                    
                     // Clean up any ghost runner entries from prior crashes
                     liveRunService.cleanupOwnStaleEntries()
-                    // Present the main sheet after the view hierarchy is ready
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showSheet = true
-                    }
-                    // Check for interrupted run — the alert is inside the sheet
-                    // content, so it presents from the sheet controller (no collision)
+                    
+                    // 1. Check for interrupted runs immediately, but DO NOT show the alert yet.
                     if let snapshot = RunPersistenceService.load() {
                         recoveredSnapshot = snapshot
-                        showRecoveryAlert = true
+                    }
+
+                    // 2. Present the main sheet after the view hierarchy is ready
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showSheet = true
+                        
+                        // 3. Wait an additional delay for the sheet's slide-up animation to finish 
+                        // before triggering any alerts attached to it. 
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            if recoveredSnapshot != nil {
+                                showRecoveryAlert = true
+                            }
+                            
+                            // Note: If you have a custom flag for Crashlytics or other SDKs
+                            // you can check them here and queue their alerts sequentially.
+                        }
                     }
                 }
                 .onChange(of: scenePhase) { newPhase in

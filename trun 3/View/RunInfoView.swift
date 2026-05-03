@@ -892,6 +892,7 @@ struct RunInfoView: View {
 
         // Update the Live Activity from location callbacks so it works in the background
         // (Timer.publish stops firing when the app is suspended)
+        let capturedRouteID = selectedRoute?.id
         locationManager.onRunDistanceChanged = { [weak runSession, weak locationManager] distanceMeters in
             guard let runSession = runSession, let locationManager = locationManager else { return }
             guard !runSession.isPaused else { return }
@@ -919,6 +920,29 @@ struct RunInfoView: View {
                 elapsedSeconds: elapsed,
                 isPaused: false
             )
+
+            // Background-safe persistence (Timer.publish doesn't fire in background)
+            let now = Date()
+            if now.timeIntervalSince(locationManager.lastBackgroundSaveDate) >= 10 {
+                locationManager.lastBackgroundSaveDate = now
+                let snapshot = runSession.buildSnapshot(locationManager: locationManager, selectedRouteID: capturedRouteID)
+                RunPersistenceService.save(snapshot)
+            }
+        }
+
+        locationManager.onSignalLost = { [weak runSession, weak locationManager] in
+            guard let runSession = runSession, let locationManager = locationManager else { return }
+            AppLogger.run.info("Signal lost during active run — saving snapshot")
+            let snapshot = runSession.buildSnapshot(locationManager: locationManager)
+            RunPersistenceService.save(snapshot)
+        }
+
+        locationManager.onSignalRestored = {
+            AppLogger.run.info("Signal restored — resuming normal tracking")
+        }
+
+        locationManager.onLocationError = { error in
+            AppLogger.run.error("Location error during run: \(error.localizedDescription)")
         }
 
         // Save initial snapshot so even a very early crash is recoverable
@@ -934,6 +958,9 @@ struct RunInfoView: View {
 
     func finishRun(minute: Int, seconds: String) {
         locationManager.onRunDistanceChanged = nil
+        locationManager.onLocationError = nil
+        locationManager.onSignalLost = nil
+        locationManager.onSignalRestored = nil
         runSession.prevRunMinute = minute
         runSession.prevRunSecond = seconds
         runSession.prevRunDistance = locationManager.convertToMiles()

@@ -22,6 +22,7 @@ struct LoginView: View {
     @State private var isAuthenticated = false
     @State private var forgotpassword = false
     @State private var currentNonce: String?
+    @State private var appleSignInDelegate: AppleSignInDelegate?
     
     @Environment(\.colorScheme) var colorScheme
     
@@ -125,29 +126,19 @@ struct LoginView: View {
                     }
                     
                     // APPLE SIGN IN
-                    SignInWithAppleButton(.signIn, onRequest: { request in
-                        let nonce = randomNonceString()
-                        currentNonce = nonce
-                        request.requestedScopes = [.fullName, .email]
-                        request.nonce = sha256(nonce)
-                    }, onCompletion: { result in
-                        switch result {
-                        case .success(let authorization):
-                            Task {
-                                do {
-                                    try await appleSignIn(authorization: authorization)
-                                } catch {
-                                    self.error = error.localizedDescription
-                                }
-                            }
-                        case .failure(let err):
-                            self.error = err.localizedDescription
+                    Button(action: { startAppleSignIn() }) {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                            Text("Sign in with Apple")
                         }
-                    })
-                    .signInWithAppleButtonStyle(.white)
-                    .frame(height: 50)
-                    .cornerRadius(25)
-                    .padding(.horizontal, 30)
+                        .foregroundColor(.black)
+                        .font(.headline)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white)
+                        .cornerRadius(25)
+                        .padding(.horizontal, 30)
+                    }
 
                     if !error.isEmpty {
                         Text(error).foregroundColor(.red).font(.caption).padding(.top)
@@ -156,9 +147,9 @@ struct LoginView: View {
                 .padding(.bottom, 40)
             }
         }
-        .onTapGesture {
+        .simultaneousGesture(TapGesture().onEnded {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        }
+        })
         .sheet(isPresented: $forgotpassword) {
             VStack(spacing: 20) {
                 Text("Reset Password")
@@ -277,13 +268,45 @@ struct LoginView: View {
         }
     }
 
+    private func startAppleSignIn() {
+        let nonce = randomNonceString()
+        currentNonce = nonce
+        let provider = ASAuthorizationAppleIDProvider()
+        let request = provider.createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        let delegate = AppleSignInDelegate { [self] result in
+            switch result {
+            case .success(let authorization):
+                Task {
+                    do {
+                        try await appleSignIn(authorization: authorization)
+                    } catch {
+                        AppLogger.auth.error("Apple Sign In failed: \(error.localizedDescription)")
+                        self.error = error.localizedDescription
+                    }
+                }
+            case .failure(let err):
+                AppLogger.auth.error("Apple Sign In authorization failed: \(err.localizedDescription)")
+                self.error = err.localizedDescription
+            }
+        }
+        appleSignInDelegate = delegate
+        controller.delegate = delegate
+        controller.performRequests()
+    }
+
     func appleSignIn(authorization: ASAuthorization) async throws {
-        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
-              let nonce = currentNonce,
-              let appleIDToken = appleIDCredential.identityToken,
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            throw NSError(domain: "AppleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Apple credential type."])
+        }
+        guard let nonce = currentNonce else {
+            throw NSError(domain: "AppleSignIn", code: -2, userInfo: [NSLocalizedDescriptionKey: "Missing nonce. Please try again."])
+        }
+        guard let appleIDToken = appleIDCredential.identityToken,
               let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            AppLogger.auth.error("Unable to fetch Apple ID token")
-            return
+            throw NSError(domain: "AppleSignIn", code: -3, userInfo: [NSLocalizedDescriptionKey: "Unable to fetch Apple ID token."])
         }
 
         let credential = OAuthProvider.appleCredential(
@@ -312,6 +335,22 @@ struct LoginView: View {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)
         return hashedData.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
+private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
+    let completion: (Result<ASAuthorization, Error>) -> Void
+
+    init(completion: @escaping (Result<ASAuthorization, Error>) -> Void) {
+        self.completion = completion
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        DispatchQueue.main.async { self.completion(.success(authorization)) }
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        DispatchQueue.main.async { self.completion(.failure(error)) }
     }
 }
 

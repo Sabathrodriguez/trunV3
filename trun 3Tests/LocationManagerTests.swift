@@ -257,4 +257,157 @@ final class LocationManagerTests: XCTestCase {
         // miles and feet should be consistent: 1 mile = 5280 feet
         XCTAssertEqual(miles * 5280, feet, accuracy: 1.0)
     }
+
+    // MARK: - Stale location rejection
+
+    func test_staleLocation_isRejected() {
+        let staleDate = Date(timeIntervalSinceNow: -15)
+        let staleLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 5, verticalAccuracy: -1, timestamp: staleDate
+        )
+        mockLocation.simulateLocation(staleLoc)
+        XCTAssertNil(sut.location)
+    }
+
+    func test_freshLocation_isAccepted() {
+        let freshLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 5, verticalAccuracy: -1, timestamp: Date()
+        )
+        mockLocation.simulateLocation(freshLoc)
+        XCTAssertNotNil(sut.location)
+    }
+
+    // MARK: - Accuracy filtering
+
+    func test_inaccurateLocation_storedInRunLocations_butNotDistance() {
+        sut.startRunTracking()
+        let goodLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: Date()
+        )
+        let badLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7949, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 200, verticalAccuracy: -1, timestamp: Date()
+        )
+        mockLocation.simulateLocation(goodLoc)
+        mockLocation.simulateLocation(badLoc)
+
+        XCTAssertEqual(sut.runLocations.count, 2)
+        XCTAssertEqual(sut.distance, 0)
+    }
+
+    func test_distanceResumes_fromLastAccurateLocation() {
+        sut.startRunTracking()
+        let loc1 = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: Date()
+        )
+        let badLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.8, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 200, verticalAccuracy: -1, timestamp: Date()
+        )
+        let loc2 = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7849, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: Date()
+        )
+        mockLocation.simulateLocation(loc1)
+        mockLocation.simulateLocation(badLoc)
+        mockLocation.simulateLocation(loc2)
+
+        let expectedDistance = loc2.distance(from: loc1)
+        XCTAssertEqual(sut.distance, expectedDistance, accuracy: 1.0)
+    }
+
+    func test_negativeAccuracy_skipsDistance() {
+        sut.startRunTracking()
+        let goodLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: Date()
+        )
+        let invalidLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7949, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: -1, verticalAccuracy: -1, timestamp: Date()
+        )
+        mockLocation.simulateLocation(goodLoc)
+        mockLocation.simulateLocation(invalidLoc)
+
+        XCTAssertEqual(sut.distance, 0)
+        XCTAssertEqual(sut.runLocations.count, 2)
+    }
+
+    // MARK: - Signal watchdog state
+
+    func test_startRunTracking_initializesSignalState() {
+        sut.startRunTracking()
+        XCTAssertNotNil(sut.lastLocationTimestamp)
+        XCTAssertFalse(sut.isSignalLost)
+    }
+
+    func test_stopRunTracking_clearsSignalState() {
+        sut.startRunTracking()
+        sut.stopRunTracking()
+        XCTAssertNil(sut.lastLocationTimestamp)
+        XCTAssertFalse(sut.isSignalLost)
+    }
+
+    func test_locationUpdate_updatesLastLocationTimestamp() {
+        sut.startRunTracking()
+        let before = sut.lastLocationTimestamp!
+        Thread.sleep(forTimeInterval: 0.05)
+
+        let loc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: Date()
+        )
+        mockLocation.simulateLocation(loc)
+
+        XCTAssertGreaterThan(sut.lastLocationTimestamp!, before)
+    }
+
+    // MARK: - Error callback
+
+    func test_didFailWithError_callsOnLocationError_duringRun() {
+        sut.startRunTracking()
+        var receivedError: Error?
+        sut.onLocationError = { error in receivedError = error }
+
+        let error = NSError(domain: kCLErrorDomain, code: CLError.locationUnknown.rawValue)
+        sut.locationManager(CLLocationManager(), didFailWithError: error)
+
+        XCTAssertNotNil(receivedError)
+    }
+
+    func test_didFailWithError_doesNotCallCallback_outsideRun() {
+        var receivedError: Error?
+        sut.onLocationError = { error in receivedError = error }
+
+        let error = NSError(domain: kCLErrorDomain, code: CLError.locationUnknown.rawValue)
+        sut.locationManager(CLLocationManager(), didFailWithError: error)
+
+        XCTAssertNil(receivedError)
+    }
+
+    // MARK: - onRunDistanceChanged fires for inaccurate locations
+
+    func test_inaccurateLocation_stillFiresDistanceCallback() {
+        sut.startRunTracking()
+        let goodLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 10, verticalAccuracy: -1, timestamp: Date()
+        )
+        mockLocation.simulateLocation(goodLoc)
+
+        var callbackFired = false
+        sut.onRunDistanceChanged = { _ in callbackFired = true }
+
+        let badLoc = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 37.7949, longitude: -122.4194),
+            altitude: 0, horizontalAccuracy: 200, verticalAccuracy: -1, timestamp: Date()
+        )
+        mockLocation.simulateLocation(badLoc)
+
+        XCTAssertTrue(callbackFired)
+    }
 }

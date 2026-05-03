@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 import CoreLocation
 import CoreMotion
 
@@ -72,6 +73,22 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     /// Fires from didUpdateLocations so it works in the background.
     var onRunDistanceChanged: ((Double) -> Void)?
 
+    var onLocationError: ((Error) -> Void)?
+    var onSignalLost: (() -> Void)?
+    var onSignalRestored: (() -> Void)?
+
+    // Signal watchdog state
+    private(set) var lastLocationTimestamp: Date?
+    private(set) var isSignalLost: Bool = false
+    private var signalWatchdog: DispatchSourceTimer?
+    private let signalLostThreshold: TimeInterval = 30
+
+    // Background task protection
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+
+    // Throttle for background persistence saves
+    var lastBackgroundSaveDate: Date = Date()
+
     init(
         locationProvider: LocationProvider = CLLocationManager(),
         altimeterProvider: AltimeterProvider = CMAltimeter()
@@ -99,9 +116,26 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
+
+        let locationAge = -location.timestamp.timeIntervalSinceNow
+        if locationAge > 10 {
+            AppLogger.location.debug("Rejected stale location — age: \(String(format: "%.1f", locationAge))s")
+            return
+        }
+
         self.location = location
 
+        if isRunActive {
+            lastLocationTimestamp = Date()
+            if isSignalLost {
+                isSignalLost = false
+                AppLogger.location.info("GPS signal restored after dead zone")
+                onSignalRestored?()
+            }
+        }
+
         // Capture every location for route tracking (HealthKit route + Strava TCX)
+        // Even low-accuracy locations are stored for the route trace
         if isRunActive {
             runLocations.append(location)
             if runLocations.count % 10 == 1 {
@@ -109,9 +143,21 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }
 
+        let isAccurate = location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= 100
+
         // Handle the first location update
         guard let lastLocation = previousLocation else {
-            previousLocation = location
+            if isAccurate {
+                previousLocation = location
+            }
+            return
+        }
+
+        guard isAccurate else {
+            AppLogger.location.debug("Skipping distance for inaccurate location — accuracy: \(location.horizontalAccuracy)m")
+            if isRunActive {
+                onRunDistanceChanged?(distance)
+            }
             return
         }
 
@@ -130,6 +176,13 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         self.heading = newHeading
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        AppLogger.location.error("Location error: \(error.localizedDescription)")
+        if isRunActive {
+            onLocationError?(error)
+        }
     }
 
     func startTracking() {
@@ -163,9 +216,15 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         isRunActive = true
         elevationGain = 0
         lastRelativeAltitude = nil
+        lastLocationTimestamp = Date()
+        isSignalLost = false
+        lastBackgroundSaveDate = Date()
         // Remove distance filter so iOS delivers locations at full frequency (~1/sec)
         locationProvider.distanceFilter = kCLDistanceFilterNone
         AppLogger.location.info("Run tracking started — distanceFilter=\(self.locationProvider.distanceFilter)")
+
+        requestBackgroundTime()
+        startSignalWatchdog()
 
         // Start barometric altimeter for accurate elevation tracking
         if type(of: altimeterProvider).isRelativeAltitudeAvailable {
@@ -186,6 +245,10 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     func stopRunTracking() {
         isRunActive = false
         altimeterProvider.stopRelativeAltitudeUpdates()
+        stopSignalWatchdog()
+        endBackgroundTime()
+        lastLocationTimestamp = nil
+        isSignalLost = false
         AppLogger.location.info("Run tracking stopped — \(self.runLocations.count) locations, elevation gain: \(String(format: "%.1f", self.elevationGain))m")
         // Restore distance filter for normal map usage (saves battery)
         locationProvider.distanceFilter = 10
@@ -198,8 +261,14 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         elevationGain = existingElevation
         previousLocation = existingLocations.last
         isRunActive = true
+        lastLocationTimestamp = Date()
+        isSignalLost = false
+        lastBackgroundSaveDate = Date()
         locationProvider.distanceFilter = kCLDistanceFilterNone
         AppLogger.location.info("Run tracking resumed — restored \(existingLocations.count) locations, \(String(format: "%.1f", existingElevation))m elevation")
+
+        requestBackgroundTime()
+        startSignalWatchdog()
 
         // Restart altimeter (continues accumulating from restored elevationGain)
         if type(of: altimeterProvider).isRelativeAltitudeAvailable {
@@ -214,6 +283,49 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 self.lastRelativeAltitude = currentAltitude
             }
         }
+    }
+
+    // MARK: - Signal Watchdog (background-safe via GCD)
+
+    private func startSignalWatchdog() {
+        stopSignalWatchdog()
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + signalLostThreshold, repeating: signalLostThreshold)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.isRunActive else { return }
+            guard let lastTimestamp = self.lastLocationTimestamp else { return }
+            let elapsed = Date().timeIntervalSince(lastTimestamp)
+            if elapsed >= self.signalLostThreshold && !self.isSignalLost {
+                self.isSignalLost = true
+                AppLogger.location.info("GPS signal lost — no update for \(String(format: "%.0f", elapsed))s")
+                DispatchQueue.main.async {
+                    self.onSignalLost?()
+                }
+            }
+        }
+        timer.resume()
+        signalWatchdog = timer
+    }
+
+    private func stopSignalWatchdog() {
+        signalWatchdog?.cancel()
+        signalWatchdog = nil
+    }
+
+    // MARK: - Background Task Protection
+
+    private func requestBackgroundTime() {
+        guard backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask { [weak self] in
+            self?.endBackgroundTime()
+        }
+        AppLogger.location.info("Requested background execution time")
+    }
+
+    private func endBackgroundTime() {
+        guard backgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
     }
 
     // MARK: - GPX Recording
