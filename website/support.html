@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support — trun</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --fg: #f5f5f7;
+      --muted: #9aa0a6;
+      --accent: #4cd964;
+      --card: #15181d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.7;
+    }
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid #1f2329;
+    }
+    nav .brand { font-weight: 700; font-size: 1.25rem; }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      margin-left: 1.5rem;
+    }
+    nav a:hover { color: var(--fg); }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+    h1 { font-size: 2.25rem; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.25rem; margin-top: 2.25rem; }
+    p, li { color: #d2d4d7; }
+    a.link { color: var(--accent); }
+    .contact-card {
+      background: var(--card);
+      border: 1px solid #1f2329;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .faq dt { font-weight: 600; margin-top: 1.25rem; }
+    .faq dd { margin: 0.25rem 0 0; color: #d2d4d7; }
+    footer {
+      border-top: 1px solid #1f2329;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--muted); margin: 0 0.75rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="brand">trun</div>
+    <div>
+      <a href="index.html">Home</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+  </nav>
+
+  <main>
+    <h1>Support</h1>
+    <p>Need help with trun? Got a feature request or a bug to report? Reach out and I'll get back to you.</p>
+
+    <div class="contact-card">
+      <strong>Email:</strong>
+      <a class="link" href="mailto:sabathrod@gmail.com">sabathrod@gmail.com</a>
+      <p style="margin: 0.5rem 0 0; color: var(--muted); font-size: 0.95rem;">Please include your iOS version and a short description of the issue. Screenshots help.</p>
+    </div>
+
+    <h2>Frequently asked questions</h2>
+    <dl class="faq">
+      <dt>Why does trun need location access?</dt>
+      <dd>To record your run route, distance, pace, and elevation using GPS. Without location access the app cannot track runs.</dd>
+
+      <dt>Can I use trun in the background?</dt>
+      <dd>Yes. trun keeps tracking your run when the app is in the background or your screen is locked. Make sure "Always" or "While Using" location permission is enabled.</dd>
+
+      <dt>What is synchronized running?</dt>
+      <dd>You can share a route with another trun user and run together — each of you sees the other's live position on the same map.</dd>
+
+      <dt>How do I delete my account?</dt>
+      <dd>Open trun, go to Settings, and tap "Delete Account". This removes your account and associated data.</dd>
+
+      <dt>The app stopped tracking my run.</dt>
+      <dd>This usually happens if GPS signal is lost or location permission was revoked. trun is designed to recover gracefully when signal returns. If the issue persists, email me with details.</dd>
+    </dl>
+  </main>
+
+  <footer>
+    <a href="support.html">Support</a>
+    <a href="privacy.html">Privacy Policy</a>
+    <div style="margin-top: 0.75rem;">© 2026 trun</div>
+  </footer>
+</body>
+</html>

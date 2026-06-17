@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>trun — GPS Run Tracker</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --fg: #f5f5f7;
+      --muted: #9aa0a6;
+      --accent: #4cd964;
+      --card: #15181d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+    }
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid #1f2329;
+    }
+    nav .brand { font-weight: 700; font-size: 1.25rem; }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      margin-left: 1.5rem;
+    }
+    nav a:hover { color: var(--fg); }
+    header {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 5rem 1.5rem 3rem;
+      text-align: center;
+    }
+    header h1 {
+      font-size: 3rem;
+      margin: 0 0 1rem;
+      letter-spacing: -0.02em;
+    }
+    header p.tagline {
+      font-size: 1.25rem;
+      color: var(--muted);
+      max-width: 620px;
+      margin: 0 auto;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-top: 2rem;
+    }
+    .feature {
+      background: var(--card);
+      border: 1px solid #1f2329;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .feature h3 { margin-top: 0; }
+    .feature p { color: var(--muted); margin-bottom: 0; }
+    footer {
+      border-top: 1px solid #1f2329;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--muted); margin: 0 0.75rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="brand">trun</div>
+    <div>
+      <a href="index.html">Home</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+  </nav>
+
+  <header>
+    <h1>Run smarter. Run together.</h1>
+    <p class="tagline">trun is a GPS run tracker for iOS. Map your routes, share runs in real time with friends, and keep an eye on every split — even from your Lock Screen.</p>
+  </header>
+
+  <main>
+    <div class="features">
+      <div class="feature">
+        <h3>Accurate GPS tracking</h3>
+        <p>High-precision route recording with pace, distance, elevation, and split times.</p>
+      </div>
+      <div class="feature">
+        <h3>Synchronized running</h3>
+        <p>Share a run with a friend and see each other's progress live on the same route.</p>
+      </div>
+      <div class="feature">
+        <h3>Live Activities</h3>
+        <p>Glance at your run stats from the Lock Screen and Dynamic Island while you move.</p>
+      </div>
+      <div class="feature">
+        <h3>Your data, your control</h3>
+        <p>Runs save locally on your device. Delete your account and data any time from inside the app.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <a href="support.html">Support</a>
+    <a href="privacy.html">Privacy Policy</a>
+    <div style="margin-top: 0.75rem;">© 2026 trun</div>
+  </footer>
+</body>
+</html>

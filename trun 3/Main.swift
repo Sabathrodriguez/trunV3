@@ -211,17 +211,18 @@ struct MainView : View {
                 showConsentPrompt = true
             }
         }
-        .alert("Help Improve TrunRun", isPresented: $showConsentPrompt) {
-            Button("Allow") {
-                consentManager.consentGranted = true
-                consentManager.hasPromptedUser = true
-            }
-            Button("Don't Allow", role: .cancel) {
-                consentManager.consentGranted = false
-                consentManager.hasPromptedUser = true
-            }
-        } message: {
-            Text("We use Firebase Analytics and Crashlytics to understand how the app is used and to fix crashes. No personal data is sold or shared with third parties. You can change this anytime in your profile settings.")
-        }
+        // The consent prompt is currently disabled to avoid interrupting the onboarding flow. It can be re-enabled in the future if needed.
+        // .alert("Help Improve TrunRun", isPresented: $showConsentPrompt) {
+        //     Button("Allow") {
+        //         consentManager.consentGranted = true
+        //         consentManager.hasPromptedUser = true
+        //     }
+        //     Button("Don't Allow", role: .cancel) {
+        //         consentManager.consentGranted = false
+        //         consentManager.hasPromptedUser = true
+        //     }
+        // } message: {
+        //     Text("We use Firebase Analytics and Crashlytics to understand how the app is used and to fix crashes. No personal data is sold or shared with third parties. You can change this anytime in your profile settings.")
+        // }
     }
 }

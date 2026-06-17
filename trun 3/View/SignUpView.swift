@@ -42,27 +42,27 @@ struct SignUpView: View {
                 VStack(spacing: 15) {
                     TextField("Email", text: $email)
                         .padding()
-                        .background(.ultraThinMaterial)
+                        .background(.white)
                         .cornerRadius(12)
                         .autocapitalization(.none)
                         .keyboardType(.emailAddress)
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .accentColor(.white)
 
                     TextField("Username", text: $username)
                         .padding()
-                        .background(.ultraThinMaterial)
+                        .background(.white)
                         .cornerRadius(12)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .accentColor(.white)
 
                     SecureField("Password", text: $password)
                         .padding()
-                        .background(.ultraThinMaterial)
+                        .background(.white)
                         .cornerRadius(12)
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .accentColor(.white)
 
                     Button(action: {

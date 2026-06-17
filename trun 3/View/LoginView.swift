@@ -48,18 +48,18 @@ struct LoginView: View {
                     // INPUT FIELDS
                     TextField("Email", text: $username)
                         .padding()
-                        .background(.ultraThinMaterial)
+                        .background(.white)
                         .cornerRadius(12)
                         .autocapitalization(.none)
                         .keyboardType(.emailAddress)
-                        .foregroundColor(.white) // Ensure text is visible
+                        .foregroundColor(.black) // Ensure text is visible
                         .accentColor(.white)
                     
                     SecureField("Password", text: $password)
                         .padding()
-                        .background(.ultraThinMaterial)
+                        .background(.white)
                         .cornerRadius(12)
-                        .foregroundColor(.white)
+                        .foregroundColor(.black)
                         .accentColor(.white)
                     
                     // LOGIN BUTTON
